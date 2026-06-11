@@ -1,0 +1,89 @@
+import 'package:flutter/material.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'screens/login_screen.dart';
+import 'screens/register_screen.dart';
+import 'screens/account_type_screen.dart';
+import 'screens/validate_account_screen.dart';
+import 'screens/recover_password_screen.dart';
+import 'screens/explore_screen.dart';
+import 'screens/car_detail_screen.dart';
+import 'screens/confirm_booking_screen.dart';
+import 'screens/bookings_screen.dart';
+import 'screens/messages_screen.dart';
+import 'screens/chat_screen.dart';
+import 'screens/profile_screen.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Hive.initFlutter();
+  await Hive.openBox('register_draft');
+  await Hive.openBox('user_docs');
+  await Hive.openBox('user_profile');
+  runApp(const Rent2GoApp());
+}
+
+class Rent2GoApp extends StatelessWidget {
+  const Rent2GoApp({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp.router(
+      title: 'Rent2Go',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData.dark().copyWith(
+        scaffoldBackgroundColor: const Color(0xFF0D0D1A),
+        colorScheme: const ColorScheme.dark(
+          primary: Color(0xFF00E5FF),
+          surface: Color(0xFF16213E),
+        ),
+      ),
+      routerConfig: _router,
+    );
+  }
+}
+
+final _router = GoRouter(
+  redirect: (context, state) async {
+    final prefs = await SharedPreferences.getInstance();
+    final loggedIn = prefs.getBool('is_logged_in') ?? false;
+    final path = state.uri.path;
+    final publicPaths = ['/login', '/register', '/account-type', '/validate', '/recover'];
+    if (!loggedIn && !publicPaths.any((p) => path.startsWith(p))) {
+      return '/login';
+    }
+    return null;
+  },
+  routes: [
+    GoRoute(path: '/', redirect: (_, __) async => '/login'),
+    GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
+    GoRoute(path: '/register', builder: (_, __) => const RegisterScreen()),
+    GoRoute(path: '/account-type', builder: (_, __) => const AccountTypeScreen()),
+    GoRoute(path: '/validate', builder: (_, __) => const ValidateAccountScreen()),
+    GoRoute(path: '/recover', builder: (_, __) => const RecoverPasswordScreen()),
+    GoRoute(path: '/home', builder: (_, __) => const ExploreScreen()),
+    GoRoute(path: '/bookings', builder: (_, __) => const BookingsScreen()),
+    GoRoute(path: '/messages', builder: (_, __) => const MessagesScreen()),
+    GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
+    GoRoute(
+      path: '/car-detail',
+      builder: (context, state) => CarDetailScreen(car: state.extra as CarData),
+    ),
+    GoRoute(
+      path: '/confirm-booking',
+      builder: (context, state) => ConfirmBookingScreen(car: state.extra as CarData),
+    ),
+    GoRoute(
+      path: '/chat',
+      builder: (context, state) {
+        final extra = state.extra as Map<String, dynamic>;
+        return ChatScreen(
+          name: extra['name'] as String,
+          car: extra['car'] as String,
+          isOnline: extra['isOnline'] as bool,
+        );
+      },
+    ),
+  ],
+);
