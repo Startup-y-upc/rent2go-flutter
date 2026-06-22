@@ -10,8 +10,8 @@ class OwnerMessagesScreen extends StatefulWidget {
 }
 
 class _OwnerMessagesScreenState extends State<OwnerMessagesScreen> {
-  String _selectedFilter = 'All';
-  final List<String> _filters = ['All', 'Active', 'Unread'];
+  String _selectedFilter = 'Todos';
+  final List<String> _filters = ['Todos', 'Activos', 'Sin leer'];
 
   @override
   Widget build(BuildContext context) {
@@ -21,7 +21,7 @@ class _OwnerMessagesScreenState extends State<OwnerMessagesScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         title: const Text(
-          'Messages',
+          'Mensajes',
           style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 24),
         ),
         actions: [
@@ -45,7 +45,7 @@ class _OwnerMessagesScreenState extends State<OwnerMessagesScreen> {
                   context,
                   name: 'Lucia M.',
                   car: 'Tesla Model 3',
-                  lastMsg: 'Perfect, I wait for you at 10h in Goya 24',
+                  lastMsg: 'Perfecto, te espero a las 10h en Goya 24',
                   time: '14:22',
                   isRead: true,
                   isOnline: true,
@@ -55,18 +55,18 @@ class _OwnerMessagesScreenState extends State<OwnerMessagesScreen> {
                   context,
                   name: 'Andres R.',
                   car: 'Mini Cooper',
-                  lastMsg: 'YOU: Thanks for everything, great car!',
-                  time: 'Yesterday',
+                  lastMsg: 'TÚ: Gracias por todo, ¡gran coche!',
+                  time: 'Ayer',
                   isRead: true,
                   isOnline: false,
                   avatar: 'https://i.pravatar.cc/150?u=andres',
                 ),
                 _buildChatTile(
                   context,
-                  name: 'Rent2Go Support',
-                  car: 'Customer Service',
-                  lastMsg: 'We have updated your insurance coverage.',
-                  time: '2 days ago',
+                  name: 'Soporte Rent2Go',
+                  car: 'Atención al cliente',
+                  lastMsg: 'Hemos actualizado tu cobertura de seguro.',
+                  time: 'Hace 2 días',
                   isRead: false,
                   isOnline: false,
                   avatar: '',
@@ -76,8 +76,8 @@ class _OwnerMessagesScreenState extends State<OwnerMessagesScreen> {
                   context,
                   name: 'Carla V.',
                   car: 'BMW Serie 3',
-                  lastMsg: 'Does 9:00 work for you for pickup?',
-                  time: '3 days ago',
+                  lastMsg: '¿Te viene bien recogerlo a las 9:00?',
+                  time: 'Hace 3 días',
                   isRead: true,
                   isOnline: false,
                   avatar: 'https://i.pravatar.cc/150?u=carla',
@@ -86,8 +86,8 @@ class _OwnerMessagesScreenState extends State<OwnerMessagesScreen> {
                   context,
                   name: 'Marco T.',
                   car: 'VW Golf',
-                  lastMsg: 'Have a safe trip!',
-                  time: '1 week ago',
+                  lastMsg: '¡Buen viaje!',
+                  time: 'Hace 1 semana',
                   isRead: true,
                   isOnline: false,
                   avatar: 'https://i.pravatar.cc/150?u=marco',
@@ -104,18 +104,18 @@ class _OwnerMessagesScreenState extends State<OwnerMessagesScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Search Messages', style: TextStyle(color: Colors.black)),
+        title: const Text('Buscar mensajes', style: TextStyle(color: Colors.black)),
         content: TextField(
           autofocus: true,
           decoration: InputDecoration(
-            hintText: 'Type customer name...',
+            hintText: 'Escribe el nombre del cliente...',
             hintStyle: TextStyle(color: Colors.grey[400]),
             border: UnderlineInputBorder(borderSide: BorderSide(color: kCyan)),
           ),
           onSubmitted: (_) => Navigator.pop(context),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
         ],
       ),
     );
@@ -166,8 +166,7 @@ class _OwnerMessagesScreenState extends State<OwnerMessagesScreen> {
     required String avatar,
     bool isSupport = false,
   }) {
-    // Basic filter logic (mock)
-    if (_selectedFilter == 'Unread' && isRead) return const SizedBox.shrink();
+    if (_selectedFilter == 'Sin leer' && isRead) return const SizedBox.shrink();
 
     return ListTile(
       onTap: () {
@@ -248,7 +247,7 @@ class _OwnerMessagesScreenState extends State<OwnerMessagesScreen> {
                 ),
               ),
             ),
-            if (isRead && lastMsg.startsWith('YOU:'))
+            if (isRead && lastMsg.startsWith('TÚ:'))
               const Icon(Icons.done_all, size: 16, color: Colors.grey),
           ],
         ),

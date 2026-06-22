@@ -10,8 +10,8 @@ class OwnerVehiclesScreen extends StatefulWidget {
 }
 
 class _OwnerVehiclesScreenState extends State<OwnerVehiclesScreen> {
-  String _selectedFilter = 'All';
-  final List<String> _filters = ['All', 'Active', 'Drafts', 'Review'];
+  String _selectedFilter = 'Todos';
+  final List<String> _filters = ['Todos', 'Activos', 'Borradores', 'Revisión'];
 
   void _addVehicle() {
     showModalBottomSheet(
@@ -36,16 +36,16 @@ class _OwnerVehiclesScreenState extends State<OwnerVehiclesScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            const Text('Publish New Vehicle', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black)),
+            const Text('Publicar nuevo vehículo', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black)),
             const SizedBox(height: 8),
-            const Text('Complete the following steps to start earning.', style: TextStyle(color: Colors.grey)),
+            const Text('Completa los siguientes pasos para empezar a ganar.', style: TextStyle(color: Colors.grey)),
             const SizedBox(height: 32),
-            _buildAddStep(1, 'Vehicle details', 'Brand, model, year and features', true),
-            _buildAddStep(2, 'Photos', 'At least 5 high quality photos', false),
-            _buildAddStep(3, 'Location & Price', 'Set where and for how much', false),
+            _buildAddStep(1, 'Detalles del vehículo', 'Marca, modelo, año y características', true),
+            _buildAddStep(2, 'Fotos', 'Al menos 5 fotos de alta calidad', false),
+            _buildAddStep(3, 'Ubicación y Precio', 'Establece dónde y por cuánto', false),
             const Spacer(),
             CustomButton(
-              label: 'Start Listing',
+              label: 'Empezar publicación',
               onPressed: () => Navigator.pop(context),
             ),
             const SizedBox(height: 16),
@@ -88,7 +88,7 @@ class _OwnerVehiclesScreenState extends State<OwnerVehiclesScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         title: const Text(
-          'My vehicles',
+          'Mis vehículos',
           style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 24),
         ),
         actions: [
@@ -111,7 +111,7 @@ class _OwnerVehiclesScreenState extends State<OwnerVehiclesScreen> {
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16),
             child: Text(
-              '3 published · 1 renting now',
+              '3 publicados · 1 en alquiler ahora',
               style: TextStyle(color: Colors.grey, fontSize: 14),
             ),
           ),
@@ -124,24 +124,24 @@ class _OwnerVehiclesScreenState extends State<OwnerVehiclesScreen> {
               children: [
                 _buildVehicleCard(
                   name: 'Tesla Model 3',
-                  km: '4,322 KM',
+                  km: '4.322 KM',
                   rating: 4.96,
                   occupancy: 78,
                   bookings: 12,
                   monthlyEarnings: 748,
-                  status: 'Renting',
+                  status: 'En alquiler',
                   statusColor: Colors.blue,
                   imageUrl: 'https://images.unsplash.com/photo-1560958089-b8a1929cea89?w=600&q=80',
                 ),
                 const SizedBox(height: 16),
                 _buildVehicleCard(
                   name: 'Mini Cooper S',
-                  km: '7,124 KM',
+                  km: '7.124 KM',
                   rating: 4.82,
                   occupancy: 64,
                   bookings: 9,
                   monthlyEarnings: 412,
-                  status: 'Available',
+                  status: 'Disponible',
                   statusColor: Colors.green,
                   imageUrl: 'https://images.unsplash.com/photo-1510903117032-f1596c327647?w=600&q=80',
                 ),
@@ -201,7 +201,7 @@ class _OwnerVehiclesScreenState extends State<OwnerVehiclesScreen> {
     return GestureDetector(
       onTap: () {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Opening details for $name...'), duration: const Duration(seconds: 1)),
+          SnackBar(content: Text('Abriendo detalles de $name...'), duration: const Duration(seconds: 1)),
         );
       },
       child: Container(
@@ -315,11 +315,11 @@ class _OwnerVehiclesScreenState extends State<OwnerVehiclesScreen> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
                       children: [
-                        _buildMiniStat('${occupancy}%', 'Occupancy'),
+                        _buildMiniStat('${occupancy}%', 'Ocupación'),
                         _buildDivider(),
-                        _buildMiniStat(bookings.toString(), 'Bookings'),
+                        _buildMiniStat(bookings.toString(), 'Reservas'),
                         _buildDivider(),
-                        _buildMiniStat('${monthlyEarnings.toInt()} €', 'Month'),
+                        _buildMiniStat('${monthlyEarnings.toInt()} €', 'Mes'),
                       ],
                     ),
                   ),
@@ -328,11 +328,11 @@ class _OwnerVehiclesScreenState extends State<OwnerVehiclesScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text(
-                        'Calendar - 30 days',
+                        'Calendario - 30 días',
                         style: TextStyle(color: Colors.grey, fontSize: 11),
                       ),
                       Text(
-                        '${occupancy}% occupied',
+                        '${occupancy}% ocupado',
                         style: const TextStyle(
                           color: Colors.black,
                           fontSize: 11,
