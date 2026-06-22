@@ -60,7 +60,7 @@ final List<CarData> demoCars = [
     seats: 4,
     range: '–',
     year: 2022,
-    imageUrl: 'https://images.unsplash.com/photo-1617469767933-0d27272fb22c?w=600&q=80',
+    imageUrl: 'https://images.unsplash.com/photo-1510903117032-f1596c327647?w=600&q=80',
     location: const LatLng(40.4200, -3.6950),
     address: 'Calle Serrano 12, Madrid',
     description: 'Mini en perfecto estado, muy divertido de conducir por la ciudad. Ideal para 2-4 personas.',
