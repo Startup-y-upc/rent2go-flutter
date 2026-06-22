@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'owner_invoices_screen.dart';
 import '../widgets/common_widgets.dart';
 
 class OwnerEarningsScreen extends StatelessWidget {
@@ -106,11 +107,20 @@ class OwnerEarningsScreen extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: _buildActionButton('Retirar', true),
+                child: _buildActionButton('Retirar', true, () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Procesando retiro a su cuenta bancaria...')),
+                  );
+                }),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: _buildActionButton('Facturas', false),
+                child: _buildActionButton('Facturas', false, () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const OwnerInvoicesScreen()),
+                  );
+                }),
               ),
             ],
           ),
@@ -119,20 +129,23 @@ class OwnerEarningsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildActionButton(String label, bool isPrimary) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      decoration: BoxDecoration(
-        color: isPrimary ? Colors.black : Colors.white,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      alignment: Alignment.center,
-      child: Text(
-        label,
-        style: TextStyle(
-          color: isPrimary ? Colors.white : Colors.black,
-          fontWeight: FontWeight.bold,
-          fontSize: 15,
+  Widget _buildActionButton(String label, bool isPrimary, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: isPrimary ? Colors.black : Colors.white,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isPrimary ? Colors.white : Colors.black,
+            fontWeight: FontWeight.bold,
+            fontSize: 15,
+          ),
         ),
       ),
     );

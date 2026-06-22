@@ -37,6 +37,11 @@ class OwnerProfileScreen extends StatelessWidget {
                   _buildBusinessSection(),
                   const SizedBox(height: 24),
                   _buildEarningsButton(),
+                  const SizedBox(height: 24),
+                  _buildOptionRow(Icons.swap_horiz, 'Cambiar a modo Arrendatario', () => context.go('/home')),
+                  _buildOptionRow(Icons.logout, 'Cerrar sesión', () async {
+                    context.go('/login');
+                  }, color: Colors.red),
                   const SizedBox(height: 40),
                 ],
               ),
@@ -44,6 +49,16 @@ class OwnerProfileScreen extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildOptionRow(IconData icon, String label, VoidCallback onTap, {Color? color}) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(icon, color: color ?? Colors.black, size: 22),
+      title: Text(label, style: TextStyle(color: color ?? Colors.black, fontSize: 14, fontWeight: FontWeight.w500)),
+      trailing: const Icon(Icons.chevron_right, color: Colors.grey, size: 20),
+      onTap: onTap,
     );
   }
 
@@ -88,7 +103,11 @@ class OwnerProfileScreen extends StatelessWidget {
               const Spacer(),
               IconButton(
                 icon: const Icon(Icons.settings_outlined, color: Colors.white),
-                onPressed: () {},
+                onPressed: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Abriendo ajustes de anfitrión...')),
+                  );
+                },
               ),
             ],
           ),
