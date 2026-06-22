@@ -315,12 +315,12 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                     _showDeliveryDialog();
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.black,
-                    foregroundColor: Colors.white,
+                    backgroundColor: kCyan,
+                    foregroundColor: Colors.black,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
-                  child: const Text('Deliver Vehicle'),
+                  child: const Text('Deliver Vehicle', style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
