@@ -135,6 +135,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: Column(
                   children: [
                     _OptionRow(
+                        icon: Icons.swap_horiz,
+                        label: 'Modo Propietario',
+                        onTap: () => context.go('/owner')),
+                    const Divider(height: 1),
+                    _OptionRow(
                         icon: Icons.notifications_outlined,
                         label: 'Notificaciones'),
                     const Divider(height: 1),
@@ -162,7 +167,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       ),
       bottomNavigationBar: _BottomNav(
-          current: _tab, onTap: (i) => setState(() => _tab = i)),
+        current: _tab,
+        onTap: (i) {
+          setState(() => _tab = i);
+          if (i == 0) context.go('/home');
+          if (i == 1) context.go('/bookings');
+          if (i == 2) context.go('/messages');
+        },
+      ),
     );
   }
 

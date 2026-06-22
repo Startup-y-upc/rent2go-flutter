@@ -15,6 +15,7 @@ import 'screens/bookings_screen.dart';
 import 'screens/messages_screen.dart';
 import 'screens/chat_screen.dart';
 import 'screens/profile_screen.dart';
+import 'screens/owner_main_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -66,6 +67,7 @@ final _router = GoRouter(
     GoRoute(path: '/bookings', builder: (_, __) => const BookingsScreen()),
     GoRoute(path: '/messages', builder: (_, __) => const MessagesScreen()),
     GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
+    GoRoute(path: '/owner', builder: (_, __) => const OwnerMainScreen()),
     GoRoute(
       path: '/car-detail',
       builder: (context, state) => CarDetailScreen(car: state.extra as CarData),
