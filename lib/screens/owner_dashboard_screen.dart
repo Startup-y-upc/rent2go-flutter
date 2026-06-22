@@ -440,23 +440,22 @@ class _ChartPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = kCyan.withOpacity(0.5)
+      ..color = kCyan.withOpacity(0.8)
       ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round
       ..style = PaintingStyle.stroke;
 
     final path = Path();
-    path.moveTo(0, size.height * 0.8);
-    path.quadraticBezierTo(
-      size.width * 0.25,
-      size.height * 0.4,
-      size.width * 0.5,
-      size.height * 0.6,
-    );
-    path.quadraticBezierTo(
-      size.width * 0.75,
+    path.moveTo(0, size.height * 0.75);
+
+    // Creates a smooth line that rises towards the end as in the design
+    path.cubicTo(
+      size.width * 0.3,
       size.height * 0.8,
+      size.width * 0.7,
+      size.height * 0.7,
       size.width,
-      size.height * 0.2,
+      size.height * 0.3,
     );
 
     canvas.drawPath(path, paint);
@@ -470,7 +469,7 @@ class _ChartPainter extends CustomPainter {
       ..shader = LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
-        colors: [kCyan.withOpacity(0.2), kCyan.withOpacity(0)],
+        colors: [kCyan.withOpacity(0.15), kCyan.withOpacity(0)],
       ).createShader(Rect.fromLTRB(0, 0, size.width, size.height));
 
     canvas.drawPath(fillPath, fillPaint);
