@@ -334,19 +334,32 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Confirm Delivery', style: TextStyle(color: Colors.black)),
-        content: const Text('Are you at the meeting point with the customer?', style: TextStyle(color: Colors.black87)),
+        backgroundColor: const Color(0xFF1B1B2F),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        title: const Text('Confirm Delivery',
+            style: TextStyle(
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.bold)),
+        content: const Text(
+          'Are you at the meeting point with the customer?',
+          style: TextStyle(color: Colors.white70, fontSize: 16),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
           ),
           TextButton(
             onPressed: () {
               Navigator.pop(context);
               _showFeedback('Starting delivery process...');
             },
-            child: const Text('Yes, I am here', style: TextStyle(color: kCyan, fontWeight: FontWeight.bold)),
+            child: const Text(
+              'Yes, I am here',
+              style: TextStyle(
+                  color: kCyan, fontWeight: FontWeight.bold, fontSize: 16),
+            ),
           ),
         ],
       ),
