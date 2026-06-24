@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import '../widgets/common_widgets.dart';
 import '../services/auth_service.dart';
 
@@ -12,11 +13,49 @@ class AccountTypeScreen extends StatefulWidget {
 
 class _AccountTypeScreenState extends State<AccountTypeScreen> {
   String? _selected;
+  bool _loading = false;
+  String? _errorMsg;
 
   Future<void> _continue() async {
     if (_selected == null) return;
-    await AuthService.setAccountType(_selected!);
-    if (mounted) context.push('/validate');
+    setState(() {
+      _loading = true;
+      _errorMsg = null;
+    });
+
+    try {
+      final draft = Hive.box('register_draft');
+      final name = draft.get('name', defaultValue: '');
+      final email = draft.get('email', defaultValue: '');
+      final phone = draft.get('phone', defaultValue: '');
+      final password = draft.get('password', defaultValue: '');
+
+      await AuthService.register(
+        email: email,
+        password: password,
+        username: email.split('@').first,
+        fullName: name,
+        phone: phone,
+        accountType: _selected!,
+      );
+
+      await AuthService.setAccountType(_selected!);
+
+      if (mounted) {
+        setState(() => _loading = false);
+        context.push('/validate');
+      }
+    } on AuthException catch (e) {
+      setState(() {
+        _loading = false;
+        _errorMsg = e.message;
+      });
+    } catch (e) {
+      setState(() {
+        _loading = false;
+        _errorMsg = 'No se pudo conectar al servidor. Verifica tu conexión.';
+      });
+    }
   }
 
   @override
@@ -24,72 +63,94 @@ class _AccountTypeScreenState extends State<AccountTypeScreen> {
     return Scaffold(
       backgroundColor: kDarkBg,
       body: SafeArea(
-        child: Padding(
+        child: ListView(
           padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 32),
-              const Rent2GoLogo(),
-              const SizedBox(height: 24),
-              StepIndicator(
-                current: 2,
-                total: 3,
-                labels: const ['Datos', 'Tipo cuenta', 'Validación'],
+          children: [
+            const SizedBox(height: 32),
+            const Rent2GoLogo(),
+            const SizedBox(height: 24),
+            StepIndicator(
+              current: 2,
+              total: 3,
+              labels: const ['Datos', 'Tipo cuenta', 'Validación'],
+            ),
+            const SizedBox(height: 32),
+            const Text(
+              '¿Cómo vas a usar\nRent2Go?',
+              style: TextStyle(
+                fontSize: 26,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+                height: 1.2,
               ),
-              const SizedBox(height: 32),
-              const Text(
-                '¿Cómo vas a usar\nRent2Go?',
-                style: TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                  height: 1.2,
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Puedes cambiarlo cuando quieras desde tu perfil.',
+              style: TextStyle(color: Colors.white54, fontSize: 13),
+            ),
+            const SizedBox(height: 24),
+
+            if (_errorMsg != null) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.redAccent.withOpacity(0.4)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.error_outline, color: Colors.redAccent, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(_errorMsg!,
+                          style: const TextStyle(color: Colors.redAccent, fontSize: 13)),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 8),
-              const Text(
-                'Puedes cambiarlo cuando quieras desde tu perfil.',
-                style: TextStyle(color: Colors.white54, fontSize: 13),
-              ),
-              const SizedBox(height: 32),
-              _TypeCard(
-                title: 'ARRENDATARIO',
-                subtitle: 'Quiero alquilar',
-                description: 'Encuentra el coche perfecto cerca de ti. Resérvalo por horas o días.',
-                perks: const [
-                  'Buscar y reservar coches',
-                  'Pagar de forma segura',
-                  'Mensajes con propietarios',
-                ],
-                icon: Icons.directions_car_outlined,
-                selected: _selected == 'arrendatario',
-                onTap: () => setState(() => _selected = 'arrendatario'),
-              ),
               const SizedBox(height: 16),
-              _TypeCard(
-                title: 'PROPIETARIO',
-                subtitle: 'Quiero rentar mi auto',
-                description: 'Convierte tu coche en ingresos. Tú decides precio y disponibilidad.',
-                perks: const [
-                  'Publicar tu vehículo',
-                  'Gestionar reservas',
-                  'Cobrar mensualmente',
-                ],
-                icon: Icons.car_rental_outlined,
-                selected: _selected == 'propietario',
-                onTap: () => setState(() => _selected = 'propietario'),
-              ),
-              const Spacer(),
-              CustomButton(
-                label: _selected == 'propietario'
-                    ? 'Continuar como propietario'
-                    : 'Continuar como arrendatario',
-                onPressed: _selected != null ? _continue : null,
-              ),
-              const SizedBox(height: 24),
             ],
-          ),
+
+            _TypeCard(
+              title: 'RENTER',
+              subtitle: 'Quiero alquilar',
+              description: 'Encuentra el coche perfecto cerca de ti. Resérvalo por horas o días.',
+              perks: const [
+                'Buscar y reservar coches',
+                'Pagar de forma segura',
+                'Mensajes con propietarios',
+              ],
+              icon: Icons.directions_car_outlined,
+              selected: _selected == 'RENTER',
+              onTap: () => setState(() => _selected = 'RENTER'),
+            ),
+            const SizedBox(height: 16),
+            _TypeCard(
+              title: 'OWNER',
+              subtitle: 'Quiero rentar mi auto',
+              description: 'Convierte tu coche en ingresos. Tú decides precio y disponibilidad.',
+              perks: const [
+                'Publicar tu vehículo',
+                'Gestionar reservas',
+                'Cobrar mensualmente',
+              ],
+              icon: Icons.car_rental_outlined,
+              selected: _selected == 'OWNER',
+              onTap: () => setState(() => _selected = 'OWNER'),
+            ),
+            const SizedBox(height: 32),
+            CustomButton(
+              label: _selected == 'OWNER'
+                  ? 'Continuar como propietario'
+                  : 'Continuar como arrendatario',
+              onPressed: _selected != null ? _continue : null,
+              loading: _loading,
+            ),
+            const SizedBox(height: 24),
+          ],
         ),
       ),
     );
@@ -140,8 +201,7 @@ class _TypeCard extends StatelessWidget {
                 color: selected ? kCyan.withOpacity(0.15) : Colors.white10,
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(icon,
-                  color: selected ? kCyan : Colors.white54, size: 24),
+              child: Icon(icon, color: selected ? kCyan : Colors.white54, size: 24),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -155,20 +215,16 @@ class _TypeCard extends StatelessWidget {
                           fontSize: 15)),
                   const SizedBox(height: 4),
                   Text(description,
-                      style: const TextStyle(
-                          color: Colors.white54, fontSize: 12)),
+                      style: const TextStyle(color: Colors.white54, fontSize: 12)),
                   const SizedBox(height: 10),
                   ...perks.map((p) => Padding(
                         padding: const EdgeInsets.only(bottom: 4),
                         child: Row(
                           children: [
                             Icon(Icons.check_box_outlined,
-                                size: 14,
-                                color: selected ? kCyan : Colors.white38),
+                                size: 14, color: selected ? kCyan : Colors.white38),
                             const SizedBox(width: 6),
-                            Text(p,
-                                style: const TextStyle(
-                                    color: Colors.white70, fontSize: 12)),
+                            Text(p, style: const TextStyle(color: Colors.white70, fontSize: 12)),
                           ],
                         ),
                       )),
@@ -176,8 +232,8 @@ class _TypeCard extends StatelessWidget {
               ),
             ),
             Radio<String>(
-              value: title.toLowerCase(),
-              groupValue: selected ? title.toLowerCase() : null,
+              value: title,
+              groupValue: selected ? title : null,
               onChanged: (_) => onTap(),
               activeColor: kCyan,
             ),
