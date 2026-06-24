@@ -19,7 +19,6 @@ class _OwnerMainScreenState extends State<OwnerMainScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Determine which screen to show for the "Profile" tab
     Widget profileTabContent;
     if (_showEarningsInsideProfile) {
       profileTabContent = OwnerEarningsScreen(
@@ -31,7 +30,7 @@ class _OwnerMainScreenState extends State<OwnerMainScreen> {
       );
     }
 
-    final List<Widget> _screens = [
+    final List<Widget> screens = [
       const OwnerDashboardScreen(),
       const OwnerVehiclesScreen(),
       const OwnerMessagesScreen(),
@@ -41,7 +40,7 @@ class _OwnerMainScreenState extends State<OwnerMainScreen> {
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
-        children: _screens,
+        children: screens,
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
@@ -72,21 +71,14 @@ class _OwnerMainScreenState extends State<OwnerMainScreen> {
       onTap: () {
         setState(() {
           _currentIndex = index;
-          // Reset profile state when switching to other tabs or clicking profile tab again
-          if (index != 3) {
-            _showEarningsInsideProfile = false;
-          }
+          if (index != 3) _showEarningsInsideProfile = false;
         });
       },
       behavior: HitTestBehavior.opaque,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            isActive ? activeIcon : icon,
-            color: isActive ? kCyan : Colors.grey,
-            size: 24,
-          ),
+          Icon(isActive ? activeIcon : icon, color: isActive ? kCyan : Colors.grey, size: 24),
           const SizedBox(height: 4),
           Text(
             label,

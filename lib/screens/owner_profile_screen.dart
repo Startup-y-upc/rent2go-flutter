@@ -1,251 +1,440 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
+import '../models/user_model.dart';
+import '../services/auth_service.dart';
 import '../widgets/common_widgets.dart';
 
-class OwnerProfileScreen extends StatelessWidget {
+class OwnerProfileScreen extends StatefulWidget {
   final VoidCallback onNavigateToEarnings;
+  const OwnerProfileScreen({super.key, required this.onNavigateToEarnings});
 
-  const OwnerProfileScreen({
-    super.key,
-    required this.onNavigateToEarnings,
-  });
+  @override
+  State<OwnerProfileScreen> createState() => _OwnerProfileScreenState();
+}
+
+class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
+  UserModel? _user;
+  bool _loading = true;
+  bool _editing = false;
+  bool _saving = false;
+  String? _errorMsg;
+
+  final _nameCtrl = TextEditingController();
+  final _phoneCtrl = TextEditingController();
+  Uint8List? _newImageBytes;
+  final _picker = ImagePicker();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUser();
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _phoneCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadUser() async {
+    final cached = await AuthService.getCurrentUser();
+    if (cached != null && mounted) {
+      setState(() {
+        _user = cached;
+        _loading = false;
+        _syncControllers();
+      });
+    }
+    final fresh = await AuthService.fetchCurrentUser();
+    if (fresh != null && mounted) {
+      setState(() {
+        _user = fresh;
+        _loading = false;
+        _syncControllers();
+      });
+    } else if (cached == null && mounted) {
+      setState(() => _loading = false);
+    }
+  }
+
+  void _syncControllers() {
+    _nameCtrl.text = _user?.fullName ?? '';
+    _phoneCtrl.text = _user?.phone ?? '';
+  }
+
+  Future<void> _pickImage() async {
+    final img = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+    if (img == null) return;
+    final bytes = await img.readAsBytes();
+    setState(() => _newImageBytes = bytes);
+  }
+
+  Future<void> _save() async {
+    if (_nameCtrl.text.trim().isEmpty) {
+      setState(() => _errorMsg = 'El nombre no puede estar vacío');
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _errorMsg = null;
+    });
+    try {
+      final updated = await AuthService.updateProfile(
+        fullName: _nameCtrl.text.trim(),
+        phone: _phoneCtrl.text.trim(),
+        profileImageBytes: _newImageBytes,
+        imageFilename: 'profile.jpg',
+      );
+      if (mounted) {
+        setState(() {
+          _user = updated;
+          _saving = false;
+          _editing = false;
+          _newImageBytes = null;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Perfil actualizado'), backgroundColor: Colors.green),
+        );
+      }
+    } on AuthException catch (e) {
+      setState(() {
+        _saving = false;
+        _errorMsg = e.message;
+      });
+    } catch (e) {
+      setState(() {
+        _saving = false;
+        _errorMsg = 'No se pudo conectar al servidor.';
+      });
+    }
+  }
+
+  void _cancelEdit() {
+    setState(() {
+      _editing = false;
+      _newImageBytes = null;
+      _errorMsg = null;
+      _syncControllers();
+    });
+  }
+
+  String _initials(String fullName) {
+    final parts = fullName.trim().split(RegExp(r'\s+'));
+    if (parts.isEmpty || parts.first.isEmpty) return '?';
+    if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
+    return (parts.first.substring(0, 1) + parts.last.substring(0, 1)).toUpperCase();
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) {
+      return const Scaffold(
+        backgroundColor: Color(0xFFF0F4F8),
+        body: Center(child: CircularProgressIndicator(color: kCyan)),
+      );
+    }
+
+    final user = _user;
+    final displayName = user?.fullName.isNotEmpty == true ? user!.fullName : 'Usuario';
+    final email = user?.email ?? '';
+    final emailVerified = user?.emailVerified ?? false;
+    final phoneVerified = user?.phoneVerified ?? false;
+    final verifiedCount = (emailVerified ? 1 : 0) + (phoneVerified ? 1 : 0);
+
     return Scaffold(
       backgroundColor: const Color(0xFFF0F4F8),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            _buildHeader(context),
-            Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildVerificationSection(),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'Mi negocio',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  _buildBusinessSection(),
-                  const SizedBox(height: 24),
-                  _buildEarningsButton(),
-                  const SizedBox(height: 40),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeader(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(24, 60, 24, 32),
-      decoration: const BoxDecoration(
-        color: Color(0xFF1B1B2F),
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(24)),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              const CircleAvatar(
-                radius: 30,
-                backgroundColor: Colors.white24,
-                child: Icon(Icons.person, size: 36, color: Colors.white),
-              ),
-              const SizedBox(width: 16),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Diego Sánchez',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Text(
-                    'Anfitrión desde 2023',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.6),
-                      fontSize: 13,
-                    ),
-                  ),
-                ],
-              ),
-              const Spacer(),
-              IconButton(
-                icon: const Icon(Icons.settings_outlined, color: Colors.white),
-                onPressed: () {},
-              ),
-            ],
-          ),
-          const SizedBox(height: 32),
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 20),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.05),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
+      body: SafeArea(
+        child: RefreshIndicator(
+          onRefresh: _loadUser,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: Column(
               children: [
-                _buildStatItem('3', 'Vehículos'),
-                _buildStatItem('64', 'Viajes'),
-                _buildStatItem('4.49', 'Rating'),
-                _buildStatItem('100%', 'Respuesta'),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 28),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF0D1B2A),
+                    borderRadius: BorderRadius.vertical(bottom: Radius.circular(24)),
+                  ),
+                  child: Column(
+                    children: [
+                      GestureDetector(
+                        onTap: _editing ? _pickImage : null,
+                        child: Stack(
+                          children: [
+                            CircleAvatar(
+                              radius: 40,
+                              backgroundColor: Colors.white24,
+                              backgroundImage: _newImageBytes != null
+                                  ? MemoryImage(_newImageBytes!)
+                                  : (user?.profileImageUrl != null && user!.profileImageUrl!.isNotEmpty)
+                                      ? NetworkImage(user.profileImageUrl!) as ImageProvider
+                                      : null,
+                              child: (_newImageBytes == null && (user?.profileImageUrl == null || user!.profileImageUrl!.isEmpty))
+                                  ? Text(_initials(displayName), style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold))
+                                  : null,
+                            ),
+                            Positioned(
+                              bottom: 0, right: 0,
+                              child: Container(
+                                width: 26, height: 26,
+                                decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                                child: const Icon(Icons.camera_alt, size: 14, color: Colors.black),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Text(displayName, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 4),
+                      const Text('Propietario', style: TextStyle(color: Colors.white54, fontSize: 13)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: GestureDetector(
+                    onTap: widget.onNavigateToEarnings,
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.grey.shade200)),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.attach_money, color: kCyan),
+                          const SizedBox(width: 12),
+                          const Expanded(child: Text('Ver mis ganancias', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.black))),
+                          const Icon(Icons.chevron_right, color: Colors.grey),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                _SectionCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.shield_outlined, color: verifiedCount == 2 ? kCyan : Colors.grey, size: 22),
+                          const SizedBox(width: 8),
+                          const Text('Confianza y verificación', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black)),
+                          const Spacer(),
+                          Text('$verifiedCount / 2', style: TextStyle(color: verifiedCount == 2 ? kCyan : Colors.grey[500], fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      LinearProgressIndicator(value: verifiedCount / 2, backgroundColor: Colors.grey.shade100, color: kCyan, minHeight: 4, borderRadius: BorderRadius.circular(2)),
+                      const SizedBox(height: 14),
+                      _VerifyRow(label: 'Correo electrónico', verified: emailVerified),
+                      _VerifyRow(label: 'Teléfono', verified: phoneVerified),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                _SectionCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Text('Mis datos', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black)),
+                          const Spacer(),
+                          if (!_editing)
+                            TextButton.icon(
+                              onPressed: () => setState(() => _editing = true),
+                              icon: const Icon(Icons.edit_outlined, size: 16),
+                              label: const Text('Editar'),
+                              style: TextButton.styleFrom(foregroundColor: kCyan, padding: EdgeInsets.zero),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      if (_errorMsg != null) ...[
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(10),
+                          margin: const EdgeInsets.only(bottom: 12),
+                          decoration: BoxDecoration(color: Colors.red.withOpacity(0.08), borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.redAccent.withOpacity(0.3))),
+                          child: Text(_errorMsg!, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
+                        ),
+                      ],
+                      _editing
+                          ? Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _EditableField(label: 'Nombre completo', controller: _nameCtrl),
+                                const SizedBox(height: 12),
+                                _EditableField(label: 'Teléfono', controller: _phoneCtrl, keyboardType: TextInputType.phone),
+                                const SizedBox(height: 4),
+                                _StaticField(label: 'Correo electrónico', value: email.isNotEmpty ? email : '—'),
+                                const SizedBox(height: 16),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: OutlinedButton(
+                                        onPressed: _saving ? null : _cancelEdit,
+                                        style: OutlinedButton.styleFrom(side: BorderSide(color: Colors.grey.shade300), padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                                        child: const Text('Cancelar', style: TextStyle(color: Colors.black)),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: ElevatedButton(
+                                        onPressed: _saving ? null : _save,
+                                        style: ElevatedButton.styleFrom(backgroundColor: kCyan, foregroundColor: Colors.black, padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                                        child: _saving
+                                            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                                            : const Text('Guardar', style: TextStyle(fontWeight: FontWeight.bold)),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            )
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _StaticField(label: 'Nombre completo', value: displayName),
+                                _StaticField(label: 'Correo electrónico', value: email.isNotEmpty ? email : '—'),
+                                _StaticField(label: 'Teléfono', value: user?.phone.isNotEmpty == true ? user!.phone : '—'),
+                              ],
+                            ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                _SectionCard(
+                  child: Column(
+                    children: [
+                      _OptionRow(icon: Icons.notifications_outlined, label: 'Notificaciones'),
+                      const Divider(height: 1),
+                      _OptionRow(icon: Icons.help_outline, label: 'Ayuda'),
+                      const Divider(height: 1),
+                      _OptionRow(
+                        icon: Icons.logout, label: 'Cerrar sesión', color: Colors.red,
+                        onTap: () async {
+                          await AuthService.logout();
+                          if (context.mounted) context.go('/login');
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
               ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
+}
 
-  Widget _buildStatItem(String value, String label) {
-    return Column(
+class _SectionCard extends StatelessWidget {
+  final Widget child;
+  const _SectionCard({required this.child});
+  @override
+  Widget build(BuildContext context) => Container(
+    margin: const EdgeInsets.symmetric(horizontal: 20),
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.grey.shade200)),
+    child: child,
+  );
+}
+
+class _VerifyRow extends StatelessWidget {
+  final String label;
+  final bool verified;
+  const _VerifyRow({required this.label, required this.verified});
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 6),
+    child: Row(
       children: [
-        Text(
-          value,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
+        Icon(verified ? Icons.check_circle : Icons.radio_button_unchecked, color: verified ? Colors.green : Colors.grey.shade400, size: 20),
+        const SizedBox(width: 12),
+        Text(label, style: const TextStyle(fontSize: 14, color: Colors.black)),
+        const Spacer(),
+        Text(verified ? 'Verificado' : 'Pendiente', style: TextStyle(color: verified ? Colors.green : Colors.orange[700], fontSize: 12, fontWeight: FontWeight.w500)),
+      ],
+    ),
+  );
+}
+
+class _StaticField extends StatelessWidget {
+  final String label, value;
+  const _StaticField({required this.label, required this.value});
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: TextStyle(color: Colors.grey[400], fontSize: 11)),
         const SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(
-            color: Colors.white.withOpacity(0.5),
-            fontSize: 11,
-          ),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.grey.shade200)),
+          child: Text(value, style: const TextStyle(fontSize: 14, color: Colors.black)),
         ),
       ],
-    );
-  }
+    ),
+  );
+}
 
-  Widget _buildVerificationSection() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Icon(Icons.verified_user_outlined, color: Colors.blue.shade700, size: 24),
-                const SizedBox(width: 12),
-                const Text(
-                  'Verificación de cuenta',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black),
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          _buildCheckItem('DNI', true),
-          const Divider(height: 1, indent: 48),
-          _buildCheckItem('Email', true),
-          const Divider(height: 1, indent: 48),
-          _buildCheckItem('Teléfono', true),
-          const Divider(height: 1, indent: 48),
-          _buildCheckItem('Cuenta bancaria', true),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCheckItem(String label, bool checked) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        children: [
-          Icon(
-            checked ? Icons.check_box : Icons.check_box_outline_blank,
-            color: checked ? Colors.black : Colors.grey,
-            size: 20,
-          ),
-          const SizedBox(width: 12),
-          Text(label, style: const TextStyle(color: Colors.black, fontSize: 14)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBusinessSection() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Column(
-        children: [
-          _buildBusinessItem('Tesla Model 3', '3 publicados', 'https://images.unsplash.com/photo-1560958089-b8a1929cea89?w=200&q=80'),
-          const Divider(height: 1),
-          _buildBusinessItem('Mini Cooper S', '1 publicados', 'https://images.unsplash.com/photo-1510903117032-f1596c327647?w=600&q=80'),
-          const Divider(height: 1),
-          _buildBusinessItem('Volkswagen Golf', '5 publicados', 'https://images.unsplash.com/photo-1541899481282-d53bffe3c35d?w=200&q=80'),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBusinessItem(String title, String subtitle, String imageUrl) {
-    return ListTile(
-      leading: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: Image.network(imageUrl, width: 48, height: 36, fit: BoxFit.cover),
-      ),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black)),
-      subtitle: Text(subtitle, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
-      trailing: const Icon(Icons.chevron_right, size: 20),
-      onTap: () {},
-    );
-  }
-
-  Widget _buildEarningsButton() {
-    return GestureDetector(
-      onTap: onNavigateToEarnings,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Colors.grey.shade200,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          children: [
-            const Text(
-              'Ganancias',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.black,
-              ),
-            ),
-            const Spacer(),
-            Icon(Icons.chevron_right, color: Colors.grey.shade400),
-          ],
+class _EditableField extends StatelessWidget {
+  final String label;
+  final TextEditingController controller;
+  final TextInputType keyboardType;
+  const _EditableField({required this.label, required this.controller, this.keyboardType = TextInputType.text});
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(label, style: TextStyle(color: Colors.grey[400], fontSize: 11)),
+      const SizedBox(height: 4),
+      TextField(
+        controller: controller,
+        keyboardType: keyboardType,
+        style: const TextStyle(fontSize: 14, color: Colors.black),
+        decoration: InputDecoration(
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          filled: true,
+          fillColor: Colors.white,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: kCyan)),
         ),
       ),
-    );
-  }
+    ],
+  );
+}
+
+class _OptionRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color? color;
+  final VoidCallback? onTap;
+  const _OptionRow({required this.icon, required this.label, this.color, this.onTap});
+  @override
+  Widget build(BuildContext context) => ListTile(
+    contentPadding: EdgeInsets.zero,
+    leading: Icon(icon, color: color ?? Colors.black, size: 22),
+    title: Text(label, style: TextStyle(color: color ?? Colors.black, fontSize: 14, fontWeight: FontWeight.w500)),
+    trailing: const Icon(Icons.chevron_right, color: Colors.grey, size: 20),
+    onTap: onTap ?? () {},
+  );
 }
