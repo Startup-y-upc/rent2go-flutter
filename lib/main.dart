@@ -16,6 +16,7 @@ import 'screens/messages_screen.dart';
 import 'screens/chat_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/owner_main_screen.dart';
+import 'services/car_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,6 +24,7 @@ void main() async {
   await Hive.openBox('register_draft');
   await Hive.openBox('user_docs');
   await Hive.openBox('user_profile');
+  await CarService().init();
   runApp(const Rent2GoApp());
 }
 

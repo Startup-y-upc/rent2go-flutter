@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../widgets/common_widgets.dart';
+import '../services/car_service.dart';
+import 'explore_screen.dart';
 
 class OwnerProfileScreen extends StatelessWidget {
   final VoidCallback onNavigateToEarnings;
@@ -14,55 +16,51 @@ class OwnerProfileScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF0F4F8),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            _buildHeader(context),
-            Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildVerificationSection(),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'Mi negocio',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black,
-                    ),
+      body: ValueListenableBuilder<List<CarData>>(
+        valueListenable: CarService().carsNotifier,
+        builder: (context, cars, _) {
+          final myCars = cars.where((c) => c.owner == 'Diego Sánchez').toList();
+          return SingleChildScrollView(
+            child: Column(
+              children: [
+                _buildHeader(context, myCars.length.toString()),
+                Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildVerificationSection(),
+                      const SizedBox(height: 24),
+                      const Text(
+                        'Mi negocio',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      _buildBusinessSection(myCars),
+                      const SizedBox(height: 24),
+                      _buildEarningsButton(),
+                      const SizedBox(height: 24),
+                      _buildOptionRow(Icons.swap_horiz, 'Cambiar a modo Arrendatario', () => context.go('/home')),
+                      _buildOptionRow(Icons.logout, 'Cerrar sesión', () async {
+                        context.go('/login');
+                      }, color: Colors.red),
+                      const SizedBox(height: 40),
+                    ],
                   ),
-                  const SizedBox(height: 12),
-                  _buildBusinessSection(),
-                  const SizedBox(height: 24),
-                  _buildEarningsButton(),
-                  const SizedBox(height: 24),
-                  _buildOptionRow(Icons.swap_horiz, 'Cambiar a modo Arrendatario', () => context.go('/home')),
-                  _buildOptionRow(Icons.logout, 'Cerrar sesión', () async {
-                    context.go('/login');
-                  }, color: Colors.red),
-                  const SizedBox(height: 40),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
 
-  Widget _buildOptionRow(IconData icon, String label, VoidCallback onTap, {Color? color}) {
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: Icon(icon, color: color ?? Colors.black, size: 22),
-      title: Text(label, style: TextStyle(color: color ?? Colors.black, fontSize: 14, fontWeight: FontWeight.w500)),
-      trailing: const Icon(Icons.chevron_right, color: Colors.grey, size: 20),
-      onTap: onTap,
-    );
-  }
-
-  Widget _buildHeader(BuildContext context) {
+  Widget _buildHeader(BuildContext context, String vehicleCount) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(24, 60, 24, 32),
@@ -121,7 +119,7 @@ class OwnerProfileScreen extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildStatItem('3', 'Vehículos'),
+                _buildStatItem(vehicleCount, 'Vehículos'),
                 _buildStatItem('64', 'Viajes'),
                 _buildStatItem('4.49', 'Rating'),
                 _buildStatItem('100%', 'Respuesta'),
@@ -133,30 +131,7 @@ class OwnerProfileScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildStatItem(String value, String label) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(
-            color: Colors.white.withOpacity(0.5),
-            fontSize: 11,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildVerificationSection() {
+  Widget _buildBusinessSection(List<CarData> myCars) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -164,65 +139,19 @@ class OwnerProfileScreen extends StatelessWidget {
         border: Border.all(color: Colors.grey.shade200),
       ),
       child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Icon(Icons.verified_user_outlined, color: Colors.blue.shade700, size: 24),
-                const SizedBox(width: 12),
-                const Text(
-                  'Verificación de cuenta',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black),
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          _buildCheckItem('DNI', true),
-          const Divider(height: 1, indent: 48),
-          _buildCheckItem('Email', true),
-          const Divider(height: 1, indent: 48),
-          _buildCheckItem('Teléfono', true),
-          const Divider(height: 1, indent: 48),
-          _buildCheckItem('Cuenta bancaria', true),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCheckItem(String label, bool checked) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        children: [
-          Icon(
-            checked ? Icons.check_box : Icons.check_box_outline_blank,
-            color: checked ? Colors.black : Colors.grey,
-            size: 20,
-          ),
-          const SizedBox(width: 12),
-          Text(label, style: const TextStyle(color: Colors.black, fontSize: 14)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBusinessSection() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Column(
-        children: [
-          _buildBusinessItem('Tesla Model 3', '3 publicados', 'https://images.unsplash.com/photo-1560958089-b8a1929cea89?w=200&q=80'),
-          const Divider(height: 1),
-          _buildBusinessItem('Mini Cooper S', '1 publicados', 'https://images.unsplash.com/photo-1510903117032-f1596c327647?w=600&q=80'),
-          const Divider(height: 1),
-          _buildBusinessItem('Volkswagen Golf', '5 publicados', 'https://images.unsplash.com/photo-1541899481282-d53bffe3c35d?w=200&q=80'),
-        ],
+        children: myCars.isEmpty
+            ? [
+                const Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Text('No hay vehículos registrados', style: TextStyle(color: Colors.grey)),
+                )
+              ]
+            : myCars.map((car) => Column(
+                children: [
+                  _buildBusinessItem(car.name, 'Publicado', car.imageUrl),
+                  if (car != myCars.last) const Divider(height: 1),
+                ],
+              )).toList(),
       ),
     );
   }

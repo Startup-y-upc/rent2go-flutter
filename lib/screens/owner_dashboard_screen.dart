@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import '../widgets/common_widgets.dart';
+import '../services/car_service.dart';
+import 'explore_screen.dart';
 
 class OwnerDashboardScreen extends StatefulWidget {
   const OwnerDashboardScreen({super.key});
@@ -29,51 +31,57 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF0F4F8),
-      body: RefreshIndicator(
-        onRefresh: () async => await Future.delayed(const Duration(seconds: 1)),
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHeader(context),
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildStatsRow(),
-                    const SizedBox(height: 24),
-                    const Text(
-                      'Hoy - 12 May',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    _buildTodayActivityCard(),
-                    const SizedBox(height: 24),
-                    if (!_requestHandled) ...[
-                      const Text(
-                        'Solicitudes pendientes',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black,
+      body: ValueListenableBuilder<List<CarData>>(
+        valueListenable: CarService().carsNotifier,
+        builder: (context, cars, _) {
+          final myCars = cars.where((c) => c.owner == 'Diego Sánchez').toList();
+          return RefreshIndicator(
+            onRefresh: () async => await Future.delayed(const Duration(seconds: 1)),
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildHeader(context),
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildStatsRow(myCars.length.toString()),
+                        const SizedBox(height: 24),
+                        const Text(
+                          'Hoy - 12 May',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 12),
-                      _buildPendingRequestCard(),
-                    ],
-                    const SizedBox(height: 100),
-                  ],
-                ),
+                        const SizedBox(height: 12),
+                        _buildTodayActivityCard(),
+                        const SizedBox(height: 24),
+                        if (!_requestHandled) ...[
+                          const Text(
+                            'Solicitudes pendientes',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          _buildPendingRequestCard(),
+                        ],
+                        const SizedBox(height: 100),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -155,11 +163,11 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     );
   }
 
-  Widget _buildStatsRow() {
+  Widget _buildStatsRow(String vehicleCount) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        _buildStatCard('3', 'Vehículos'),
+        _buildStatCard(vehicleCount, 'Vehículos'),
         _buildStatCard('5', 'Reservas'),
         _buildStatCard('4.9', 'Rating', isRating: true),
       ],

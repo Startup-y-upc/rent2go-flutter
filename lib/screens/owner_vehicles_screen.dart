@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../widgets/common_widgets.dart';
+import '../services/car_service.dart';
+import 'add_car_screen.dart';
+import 'explore_screen.dart';
 
 class OwnerVehiclesScreen extends StatefulWidget {
   const OwnerVehiclesScreen({super.key});
@@ -14,44 +17,9 @@ class _OwnerVehiclesScreenState extends State<OwnerVehiclesScreen> {
   final List<String> _filters = ['Todos', 'Activos', 'Borradores', 'Revisión'];
 
   void _addVehicle() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.7,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
-              ),
-            ),
-            const SizedBox(height: 24),
-            const Text('Publicar nuevo vehículo', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black)),
-            const SizedBox(height: 8),
-            const Text('Completa los siguientes pasos para empezar a ganar.', style: TextStyle(color: Colors.grey)),
-            const SizedBox(height: 32),
-            _buildAddStep(1, 'Detalles del vehículo', 'Marca, modelo, año y características', true),
-            _buildAddStep(2, 'Fotos', 'Al menos 5 fotos de alta calidad', false),
-            _buildAddStep(3, 'Ubicación y Precio', 'Establece dónde y por cuánto', false),
-            const Spacer(),
-            CustomButton(
-              label: 'Empezar publicación',
-              onPressed: () => Navigator.pop(context),
-            ),
-            const SizedBox(height: 16),
-          ],
-        ),
-      ),
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const AddCarScreen()),
     );
   }
 
@@ -105,50 +73,60 @@ class _OwnerVehiclesScreenState extends State<OwnerVehiclesScreen> {
           ),
         ],
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              '3 publicados · 1 en alquiler ahora',
-              style: TextStyle(color: Colors.grey, fontSize: 14),
-            ),
-          ),
-          const SizedBox(height: 16),
-          _buildFilters(),
-          const SizedBox(height: 16),
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              children: [
-                _buildVehicleCard(
-                  name: 'Tesla Model 3',
-                  km: '4.322 KM',
-                  rating: 4.96,
-                  occupancy: 78,
-                  bookings: 12,
-                  monthlyEarnings: 748,
-                  status: 'En alquiler',
-                  statusColor: Colors.blue,
-                  imageUrl: 'https://images.unsplash.com/photo-1560958089-b8a1929cea89?w=600&q=80',
+      body: ValueListenableBuilder<List<CarData>>(
+        valueListenable: CarService().carsNotifier,
+        builder: (context, allCars, _) {
+          final myCars = allCars.where((c) => c.owner == 'Diego Sánchez').toList();
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  '${myCars.length} publicados · ${myCars.where((c) => c.trips > 0).length} en alquiler ahora',
+                  style: const TextStyle(color: Colors.grey, fontSize: 14),
                 ),
-                const SizedBox(height: 16),
-                _buildVehicleCard(
-                  name: 'Mini Cooper S',
-                  km: '7.124 KM',
-                  rating: 4.82,
-                  occupancy: 64,
-                  bookings: 9,
-                  monthlyEarnings: 412,
-                  status: 'Disponible',
-                  statusColor: Colors.green,
-                  imageUrl: 'https://images.unsplash.com/photo-1510903117032-f1596c327647?w=600&q=80',
-                ),
-              ],
-            ),
-          ),
-        ],
+              ),
+              const SizedBox(height: 16),
+              _buildFilters(),
+              const SizedBox(height: 16),
+              Expanded(
+                child: myCars.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.directions_car_outlined, size: 64, color: Colors.grey[300]),
+                            const SizedBox(height: 16),
+                            const Text('No tienes vehículos publicados', style: TextStyle(color: Colors.grey)),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        itemCount: myCars.length,
+                        itemBuilder: (context, i) {
+                          final car = myCars[i];
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 16),
+                            child: _buildVehicleCard(
+                              name: car.name,
+                              km: '0 KM', // Mock
+                              rating: car.rating,
+                              occupancy: 0, // Mock
+                              bookings: 0, // Mock
+                              monthlyEarnings: 0, // Mock
+                              status: 'Disponible',
+                              statusColor: Colors.green,
+                              imageUrl: car.imageUrl,
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
