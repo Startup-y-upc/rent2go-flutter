@@ -11,12 +11,12 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _formKey = GlobalKey<FormState>();
+  final _formKey   = GlobalKey<FormState>();
   final _emailCtrl = TextEditingController();
   final _passCtrl  = TextEditingController();
-  bool _remember = false;
-  bool _loading = false;
-  bool _obscurePass = true;
+  bool _remember     = false;
+  bool _loading       = false;
+  bool _obscurePass   = true;
   String? _errorMsg;
 
   @override
@@ -44,7 +44,7 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      await AuthService.login(
+      final user = await AuthService.login(
         email: _emailCtrl.text.trim(),
         password: _passCtrl.text,
         rememberMe: _remember,
@@ -52,7 +52,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (mounted) {
         setState(() => _loading = false);
-        context.go('/home');
+        if (user.accountType == 'OWNER') {
+          context.go('/owner');
+        } else {
+          context.go('/home');
+        }
       }
     } on AuthException catch (e) {
       setState(() {
@@ -91,12 +95,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 40),
                 const Text(
                   'Bienvenido\nde vuelta.',
-                  style: TextStyle(
-                    fontSize: 30,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                    height: 1.2,
-                  ),
+                  style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold, color: Colors.white, height: 1.2),
                 ),
                 const SizedBox(height: 10),
                 const Text(
@@ -116,15 +115,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.error_outline,
-                            color: Colors.redAccent, size: 18),
+                        const Icon(Icons.error_outline, color: Colors.redAccent, size: 18),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: Text(
-                            _errorMsg!,
-                            style: const TextStyle(
-                                color: Colors.redAccent, fontSize: 13),
-                          ),
+                          child: Text(_errorMsg!, style: const TextStyle(color: Colors.redAccent, fontSize: 13)),
                         ),
                       ],
                     ),
@@ -147,8 +141,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Contraseña',
-                        style: TextStyle(color: Colors.white70, fontSize: 13)),
+                    const Text('Contraseña', style: TextStyle(color: Colors.white70, fontSize: 13)),
                     const SizedBox(height: 6),
                     TextFormField(
                       controller: _passCtrl,
@@ -162,34 +155,14 @@ class _LoginScreenState extends State<LoginScreen> {
                       decoration: InputDecoration(
                         filled: true,
                         fillColor: kInputBg,
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 14),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: Colors.white12),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: Colors.white12),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: kCyan),
-                        ),
-                        errorBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: Colors.redAccent),
-                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Colors.white12)),
+                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Colors.white12)),
+                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: kCyan)),
+                        errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Colors.redAccent)),
                         suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscurePass
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined,
-                            color: Colors.white54,
-                            size: 20,
-                          ),
-                          onPressed: () =>
-                              setState(() => _obscurePass = !_obscurePass),
+                          icon: Icon(_obscurePass ? Icons.visibility_off_outlined : Icons.visibility_outlined, color: Colors.white54, size: 20),
+                          onPressed: () => setState(() => _obscurePass = !_obscurePass),
                         ),
                       ),
                     ),
@@ -205,36 +178,24 @@ class _LoginScreenState extends State<LoginScreen> {
                       activeColor: kCyan,
                       side: const BorderSide(color: Colors.white38),
                     ),
-                    const Text('Recuérdame',
-                        style: TextStyle(color: Colors.white70, fontSize: 13)),
+                    const Text('Recuérdame', style: TextStyle(color: Colors.white70, fontSize: 13)),
                     const Spacer(),
                     TextButton(
                       onPressed: () => context.push('/recover'),
-                      child: const Text(
-                        '¿Olvidaste tu contraseña?',
-                        style: TextStyle(color: kCyan, fontSize: 12),
-                      ),
+                      child: const Text('¿Olvidaste tu contraseña?', style: TextStyle(color: kCyan, fontSize: 12)),
                     ),
                   ],
                 ),
                 const Spacer(),
-                CustomButton(
-                  label: 'Iniciar sesión',
-                  onPressed: _login,
-                  loading: _loading,
-                ),
+                CustomButton(label: 'Iniciar sesión', onPressed: _login, loading: _loading),
                 const SizedBox(height: 16),
                 Center(
                   child: TextButton(
                     onPressed: () => context.push('/register'),
                     child: const Text.rich(
                       TextSpan(children: [
-                        TextSpan(
-                            text: '¿No tienes cuenta? ',
-                            style: TextStyle(color: Colors.white54)),
-                        TextSpan(
-                            text: 'Crear cuenta',
-                            style: TextStyle(color: kCyan)),
+                        TextSpan(text: '¿No tienes cuenta? ', style: TextStyle(color: Colors.white54)),
+                        TextSpan(text: 'Crear cuenta', style: TextStyle(color: kCyan)),
                       ]),
                     ),
                   ),

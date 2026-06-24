@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_model.dart';
@@ -41,8 +42,6 @@ class AuthService {
         statusCode: response.statusCode);
   }
 
-  // REGISTRO
-  /// POST /api/v1/auth/register
   static Future<UserModel> register({
     required String email,
     required String password,
@@ -69,7 +68,6 @@ class AuthService {
     );
 
     if (response.statusCode == 200 || response.statusCode == 201) {
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
       return await login(email: email, password: password, rememberMe: true);
     }
 
@@ -77,14 +75,106 @@ class AuthService {
         statusCode: response.statusCode);
   }
 
+  // RECUPERAR CONTRASEÑA
+  // POST /api/v1/auth/password/request
+  // Envía un token de recuperación al correo del usuario
+  static Future<void> requestPasswordReset({required String email}) async {
+    final uri = Uri.parse('$baseUrl/auth/password/request');
+    final response = await http.post(
+      uri,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'email': email}),
+    );
+
+    if (response.statusCode != 200) {
+      throw AuthException(_extractMessage(response, 'No se pudo enviar el correo de recuperación'),
+          statusCode: response.statusCode);
+    }
+  }
+
+  /// POST /api/v1/auth/password/reset
+  /// Completa el cambio usando el token recibido por correo + la nueva contraseña
+  static Future<void> confirmPasswordReset({
+    required String token,
+    required String newPassword,
+  }) async {
+    final uri = Uri.parse('$baseUrl/auth/password/reset');
+    final response = await http.post(
+      uri,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'token': token, 'newPassword': newPassword}),
+    );
+
+    if (response.statusCode != 200) {
+      throw AuthException(_extractMessage(response, 'No se pudo cambiar la contraseña. Verifica el código.'),
+          statusCode: response.statusCode);
+    }
+  }
+
+  static Future<UserModel> updateProfile({
+    required String fullName,
+    required String phone,
+    Uint8List? profileImageBytes,
+    String? imageFilename,
+  }) async {
+    final token = await getToken();
+    if (token == null) throw AuthException('No hay sesión activa');
+
+    final uri = Uri.parse('$baseUrl/auth/me');
+    final request = http.MultipartRequest('PATCH', uri);
+    request.headers['Authorization'] = 'Bearer $token';
+    request.fields['fullName'] = fullName;
+    request.fields['phone'] = phone;
+
+    if (profileImageBytes != null) {
+      request.files.add(http.MultipartFile.fromBytes(
+        'profileImage',
+        profileImageBytes,
+        filename: imageFilename ?? 'profile.jpg',
+      ));
+    }
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final current = await getCurrentUser();
+      final updated = UserModel.fromJson({...data, 'token': current?.token ?? ''});
+      await _saveUserOnly(updated);
+      return updated;
+    }
+
+    throw AuthException(_extractMessage(response, 'No se pudo actualizar el perfil'),
+        statusCode: response.statusCode);
+  }
+
   static String _extractMessage(http.Response response, String fallback) {
     try {
       final body = jsonDecode(response.body);
-      if (body is Map && body['message'] != null) {
-        return body['message'].toString();
+      if (body is Map) {
+        if (body['message'] != null) return _humanize(body['message'].toString());
+        if (body['error'] != null) return _humanize(body['error'].toString());
       }
     } catch (_) {}
     return fallback;
+  }
+
+  static String _humanize(String raw) {
+    final lower = raw.toLowerCase();
+    if (lower.contains('email already registered') || lower.contains('already exists')) {
+      return 'Ese correo ya está registrado. Intenta iniciar sesión o usa otro correo.';
+    }
+    if (lower.contains('invalid credentials') || lower.contains('incorrect password')) {
+      return 'Correo o contraseña incorrectos.';
+    }
+    if (lower.contains('user not found')) {
+      return 'No encontramos una cuenta con ese correo.';
+    }
+    if (lower.contains('invalid token') || lower.contains('expired')) {
+      return 'El código ha expirado o es inválido. Solicita uno nuevo.';
+    }
+    return raw;
   }
 
   static Future<void> _saveSession({
@@ -104,6 +194,11 @@ class AuthService {
     } else {
       await prefs.remove(_emailKey);
     }
+  }
+
+  static Future<void> _saveUserOnly(UserModel user) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_userKey, jsonEncode(user.toJson()));
   }
 
   static Future<bool> isLoggedIn() async {
@@ -148,14 +243,13 @@ class AuthService {
     if (token == null) return null;
 
     final uri = Uri.parse('$baseUrl/auth/me');
-    final response = await http.get(
-      uri,
-      headers: {'Authorization': 'Bearer $token'},
-    );
+    final response = await http.get(uri, headers: {'Authorization': 'Bearer $token'});
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
-      return UserModel.fromJson(data);
+      final user = UserModel.fromJson({...data, 'token': token});
+      await _saveUserOnly(user);
+      return user;
     }
     return null;
   }

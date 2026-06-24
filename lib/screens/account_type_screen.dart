@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../widgets/common_widgets.dart';
-import '../services/auth_service.dart';
 
 class AccountTypeScreen extends StatefulWidget {
   const AccountTypeScreen({super.key});
@@ -13,49 +12,23 @@ class AccountTypeScreen extends StatefulWidget {
 
 class _AccountTypeScreenState extends State<AccountTypeScreen> {
   String? _selected;
-  bool _loading = false;
-  String? _errorMsg;
 
-  Future<void> _continue() async {
+  @override
+  void initState() {
+    super.initState();
+    final draft = Hive.box('register_draft');
+    final saved = draft.get('accountType');
+    if (saved != null) _selected = saved;
+  }
+
+  void _continue() {
     if (_selected == null) return;
-    setState(() {
-      _loading = true;
-      _errorMsg = null;
-    });
+    Hive.box('register_draft').put('accountType', _selected);
+    context.push('/validate');
+  }
 
-    try {
-      final draft = Hive.box('register_draft');
-      final name = draft.get('name', defaultValue: '');
-      final email = draft.get('email', defaultValue: '');
-      final phone = draft.get('phone', defaultValue: '');
-      final password = draft.get('password', defaultValue: '');
-
-      await AuthService.register(
-        email: email,
-        password: password,
-        username: email.split('@').first,
-        fullName: name,
-        phone: phone,
-        accountType: _selected!,
-      );
-
-      await AuthService.setAccountType(_selected!);
-
-      if (mounted) {
-        setState(() => _loading = false);
-        context.push('/validate');
-      }
-    } on AuthException catch (e) {
-      setState(() {
-        _loading = false;
-        _errorMsg = e.message;
-      });
-    } catch (e) {
-      setState(() {
-        _loading = false;
-        _errorMsg = 'No se pudo conectar al servidor. Verifica tu conexión.';
-      });
-    }
+  void _cancel() {
+    context.go('/register');
   }
 
   @override
@@ -67,7 +40,17 @@ class _AccountTypeScreenState extends State<AccountTypeScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 24),
           children: [
             const SizedBox(height: 32),
-            const Rent2GoLogo(),
+            Row(
+              children: [
+                const Rent2GoLogo(),
+                const Spacer(),
+                TextButton(
+                  onPressed: _cancel,
+                  child: const Text('Cancelar',
+                      style: TextStyle(color: Colors.white54, fontSize: 13)),
+                ),
+              ],
+            ),
             const SizedBox(height: 24),
             StepIndicator(
               current: 2,
@@ -90,29 +73,6 @@ class _AccountTypeScreenState extends State<AccountTypeScreen> {
               style: TextStyle(color: Colors.white54, fontSize: 13),
             ),
             const SizedBox(height: 24),
-
-            if (_errorMsg != null) ...[
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.redAccent.withOpacity(0.4)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.error_outline, color: Colors.redAccent, size: 18),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(_errorMsg!,
-                          style: const TextStyle(color: Colors.redAccent, fontSize: 13)),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
 
             _TypeCard(
               title: 'RENTER',
@@ -147,7 +107,15 @@ class _AccountTypeScreenState extends State<AccountTypeScreen> {
                   ? 'Continuar como propietario'
                   : 'Continuar como arrendatario',
               onPressed: _selected != null ? _continue : null,
-              loading: _loading,
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: TextButton(
+                onPressed: _cancel,
+                child: const Text('Cancelar y volver al registro',
+                    style: TextStyle(color: Colors.white38, fontSize: 13)),
+              ),
             ),
             const SizedBox(height: 24),
           ],

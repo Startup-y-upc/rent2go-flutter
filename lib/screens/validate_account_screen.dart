@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:typed_data';
 import '../widgets/common_widgets.dart';
+import '../services/auth_service.dart';
 
 class ValidateAccountScreen extends StatefulWidget {
   const ValidateAccountScreen({super.key});
@@ -16,6 +16,7 @@ class ValidateAccountScreen extends StatefulWidget {
 class _ValidateAccountScreenState extends State<ValidateAccountScreen> {
   Uint8List? _licenciaBytes, _dniAnvBytes, _dniRevBytes;
   bool _loading = false;
+  String? _errorMsg;
   final _picker = ImagePicker();
   late Box _docsBox;
 
@@ -45,8 +46,8 @@ class _ValidateAccountScreenState extends State<ValidateAccountScreen> {
     setState(() {
       switch (key) {
         case 'licencia': _licenciaBytes = null;
-        case 'dni_anv':  _dniAnvBytes   = null;
-        case 'dni_rev':  _dniRevBytes   = null;
+        case 'dni_anv':  _dniAnvBytes = null;
+        case 'dni_rev':  _dniRevBytes = null;
       }
     });
   }
@@ -56,15 +57,54 @@ class _ValidateAccountScreenState extends State<ValidateAccountScreen> {
 
   Future<void> _submit() async {
     if (!_allUploaded) return;
-    setState(() => _loading = true);
-    await Future.delayed(const Duration(seconds: 1));
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('is_logged_in', true);
-    Hive.box('register_draft').clear();
-    if (mounted) {
-      setState(() => _loading = false);
-      context.go('/home');
+    setState(() {
+      _loading = true;
+      _errorMsg = null;
+    });
+
+    try {
+      final draft = Hive.box('register_draft');
+      final name = draft.get('name',  defaultValue: '');
+      final email = draft.get('email', defaultValue: '');
+      final phone = draft.get('phone', defaultValue: '');
+      final password = draft.get('password', defaultValue: '');
+      final accountType = draft.get('accountType', defaultValue: 'RENTER');
+
+      await AuthService.register(
+        email: email,
+        password: password,
+        username: email.split('@').first,
+        fullName: name,
+        phone: phone,
+        accountType: accountType,
+      );
+
+      Hive.box('register_draft').clear();
+      _docsBox.clear();
+
+      if (mounted) {
+        setState(() => _loading = false);
+        if (accountType == 'OWNER') {
+          context.go('/owner');
+        } else {
+          context.go('/home');
+        }
+      }
+    } on AuthException catch (e) {
+      setState(() {
+        _loading = false;
+        _errorMsg = e.message;
+      });
+    } catch (e) {
+      setState(() {
+        _loading = false;
+        _errorMsg = 'No se pudo conectar al servidor. Verifica tu conexión.';
+      });
     }
+  }
+
+  void _cancel() {
+    context.go('/register');
   }
 
   @override
@@ -78,7 +118,17 @@ class _ValidateAccountScreenState extends State<ValidateAccountScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 32),
-              const Rent2GoLogo(),
+              Row(
+                children: [
+                  const Rent2GoLogo(),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: _cancel,
+                    child: const Text('Cancelar',
+                        style: TextStyle(color: Colors.white54, fontSize: 13)),
+                  ),
+                ],
+              ),
               const SizedBox(height: 24),
               StepIndicator(
                 current: 3,
@@ -91,7 +141,31 @@ class _ValidateAccountScreenState extends State<ValidateAccountScreen> {
               const SizedBox(height: 8),
               const Text('Sube una foto clara de tu DNI y de tu licencia de conducir.',
                   style: TextStyle(color: Colors.white54, fontSize: 13)),
-              const SizedBox(height: 28),
+              const SizedBox(height: 20),
+
+              if (_errorMsg != null) ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.redAccent.withOpacity(0.4)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.error_outline, color: Colors.redAccent, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(_errorMsg!,
+                            style: const TextStyle(color: Colors.redAccent, fontSize: 13)),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+
               Expanded(
                 child: ListView(children: [
                   _DocCard(label: 'Licencia de conducir', subtitle: 'Vigente, en color y completa',
@@ -106,7 +180,16 @@ class _ValidateAccountScreenState extends State<ValidateAccountScreen> {
               ),
               const SizedBox(height: 16),
               CustomButton(label: 'Continuar', onPressed: _allUploaded ? _submit : null, loading: _loading),
-              const SizedBox(height: 24),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: TextButton(
+                  onPressed: _cancel,
+                  child: const Text('Cancelar y volver al registro',
+                      style: TextStyle(color: Colors.white38, fontSize: 13)),
+                ),
+              ),
+              const SizedBox(height: 16),
             ],
           ),
         ),
