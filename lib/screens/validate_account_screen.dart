@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:image_picker/image_picker.dart';
@@ -19,11 +20,29 @@ class _ValidateAccountScreenState extends State<ValidateAccountScreen> {
   String? _errorMsg;
   final _picker = ImagePicker();
   late Box _docsBox;
+  final _formKey = GlobalKey<FormState>();
+  final _idNumberCtrl = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _docsBox = Hive.box('user_docs');
+    _idNumberCtrl.text = _docsBox.get('idNumber', defaultValue: '');
+  }
+
+  @override
+  void dispose() {
+    _idNumberCtrl.dispose();
+    super.dispose();
+  }
+
+  String? _validateIdNumber(String? v) {
+    if (v == null || v.trim().isEmpty) return 'Ingresa tu número de documento';
+    if (!RegExp(r'^[0-9]+$').hasMatch(v.trim())) return 'Solo se permiten números';
+    if (v.trim().length < 8 || v.trim().length > 12) {
+      return 'Debe tener entre 8 y 12 dígitos';
+    }
+    return null;
   }
 
   Future<void> _pick(String key) async {
@@ -57,6 +76,7 @@ class _ValidateAccountScreenState extends State<ValidateAccountScreen> {
 
   Future<void> _submit() async {
     if (!_allUploaded) return;
+    if (!_formKey.currentState!.validate()) return;
     setState(() {
       _loading = true;
       _errorMsg = null;
@@ -69,6 +89,8 @@ class _ValidateAccountScreenState extends State<ValidateAccountScreen> {
       final phone = draft.get('phone', defaultValue: '');
       final password = draft.get('password', defaultValue: '');
       final accountType = draft.get('accountType', defaultValue: 'RENTER');
+      final idNumber = _idNumberCtrl.text.trim();
+      await _docsBox.put('idNumber', idNumber);
 
       final user = await AuthService.register(
         email: email,
@@ -81,20 +103,14 @@ class _ValidateAccountScreenState extends State<ValidateAccountScreen> {
 
       // US07: envía los documentos de verificación capturados en esta pantalla
       // al backend (POST /auth/kyc/multipart) ahora que ya existe una sesión
-      // (register() inicia sesión internamente). Antes de este cambio las
-      // imágenes se descartaban sin ser subidas nunca.
-      //
-      // ASSUMPTION — PENDING PRODUCT SIGN-OFF: el backend exige `idNumber`
-      // (número de documento) como campo obligatorio, pero el flujo de registro
-      // actual (register_screen.dart) no captura ese dato en ningún paso. Como
-      // fallback no bloqueante se usa el teléfono como idNumber provisional para
-      // no perder la subida de documentos; esto debe reemplazarse por un campo
-      // real de número de documento en el formulario de registro.
+      // (register() inicia sesión internamente). El número de documento (DNI)
+      // ahora se captura con un campo real en este mismo paso -- ya no se usa
+      // el teléfono como valor provisional (ver decision_history.json).
       try {
         await AuthService.submitKycMultipart(
           userId: user.userId,
           fullName: name,
-          idNumber: phone,
+          idNumber: idNumber,
           dniFrontBytes: _dniAnvBytes!,
           dniBackBytes: _dniRevBytes!,
           driverLicenseBytes: _licenciaBytes,
@@ -200,7 +216,48 @@ class _ValidateAccountScreenState extends State<ValidateAccountScreen> {
               ],
 
               Expanded(
-                child: ListView(children: [
+                child: Form(
+                  key: _formKey,
+                  child: ListView(children: [
+                  Text('Número de documento (DNI)',
+                      style: TextStyle(color: Colors.white70, fontSize: 13)),
+                  const SizedBox(height: 6),
+                  TextFormField(
+                    key: const Key('id_number_field'),
+                    controller: _idNumberCtrl,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(12),
+                    ],
+                    validator: _validateIdNumber,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: '12345678',
+                      hintStyle: const TextStyle(color: Colors.white30),
+                      filled: true,
+                      fillColor: kInputBg,
+                      contentPadding:
+                          const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: Colors.white12),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: Colors.white12),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: kCyan),
+                      ),
+                      errorBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: Colors.redAccent),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
                   _DocCard(label: 'Licencia de conducir', subtitle: 'Vigente, en color y completa',
                       bytes: _licenciaBytes, onPick: () => _pick('licencia'), onDelete: () => _delete('licencia')),
                   const SizedBox(height: 14),
@@ -209,7 +266,8 @@ class _ValidateAccountScreenState extends State<ValidateAccountScreen> {
                   const SizedBox(height: 14),
                   _DocCard(label: 'DNI · Reverso',
                       bytes: _dniRevBytes, onPick: () => _pick('dni_rev'), onDelete: () => _delete('dni_rev')),
-                ]),
+                  ]),
+                ),
               ),
               const SizedBox(height: 16),
               CustomButton(label: 'Continuar', onPressed: _allUploaded ? _submit : null, loading: _loading),

@@ -230,4 +230,105 @@ class VehicleService {
     } catch (_) {}
     throw Exception(message);
   }
+
+  /// GET /api/v1/availability/vehicle/{vehicleId}/blocks — US13/US15.
+  /// Devuelve los rangos de fechas bloqueados manualmente por el propietario
+  /// (o ya reservados) para un vehículo, para pintar el calendario.
+  static Future<List<AvailabilityBlock>> getAvailabilityBlocks(int vehicleId) async {
+    final uri = Uri.parse('$baseUrl/availability/vehicle/$vehicleId/blocks');
+    final response = await http.get(uri);
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body) as List;
+      return data.map((b) => AvailabilityBlock.fromJson(b)).toList();
+    }
+    throw Exception('No se pudo cargar la disponibilidad del vehículo');
+  }
+
+  /// POST /api/v1/availability/block — US13.
+  /// Bloquea un rango de fechas para que no pueda reservarse (mantenimiento,
+  /// uso personal, etc). El backend rechaza el rango si se solapa con una
+  /// reserva ya confirmada (409/400, mensaje estandarizado).
+  static Future<void> blockAvailability({
+    required int vehicleId,
+    required DateTime startDate,
+    required DateTime endDate,
+    required int requestedBy,
+  }) async {
+    final token = await AuthService.getToken();
+    final uri = Uri.parse('$baseUrl/availability/block');
+    final response = await http.post(
+      uri,
+      headers: {
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'vehicleId': vehicleId,
+        'startDate': _dateOnly(startDate),
+        'endDate': _dateOnly(endDate),
+        'requestedBy': requestedBy,
+      }),
+    );
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return;
+    }
+
+    String message = 'No se pudo bloquear el rango de fechas';
+    try {
+      final body = jsonDecode(response.body);
+      if (body is Map && (body['message'] != null || body['error'] != null)) {
+        message = (body['message'] ?? body['error']).toString();
+      }
+    } catch (_) {}
+    if (response.statusCode == 409 || response.statusCode == 400) {
+      throw Exception('Ese rango se solapa con una reserva confirmada. Elige otras fechas.');
+    }
+    throw Exception(message);
+  }
+
+  /// DELETE /api/v1/availability/vehicle/{vehicleId}/range — US13.
+  /// Libera (desbloquea) un rango de fechas previamente bloqueado.
+  static Future<void> unblockAvailabilityRange({
+    required int vehicleId,
+    required DateTime startDate,
+    required DateTime endDate,
+  }) async {
+    final token = await AuthService.getToken();
+    final uri = Uri.parse('$baseUrl/availability/vehicle/$vehicleId/range').replace(
+      queryParameters: {
+        'startDate': _dateOnly(startDate),
+        'endDate': _dateOnly(endDate),
+      },
+    );
+    final response = await http.delete(
+      uri,
+      headers: {if (token != null) 'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200 || response.statusCode == 204) {
+      return;
+    }
+    throw Exception('No se pudo liberar el rango de fechas');
+  }
+
+  static String _dateOnly(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+}
+
+class AvailabilityBlock {
+  final int id;
+  final DateTime startDate;
+  final DateTime endDate;
+
+  AvailabilityBlock({required this.id, required this.startDate, required this.endDate});
+
+  factory AvailabilityBlock.fromJson(Map<String, dynamic> json) {
+    return AvailabilityBlock(
+      id: json['id'] is int ? json['id'] : int.tryParse(json['id'].toString()) ?? 0,
+      startDate: DateTime.parse(json['startDate'].toString()),
+      endDate: DateTime.parse(json['endDate'].toString()),
+    );
+  }
 }

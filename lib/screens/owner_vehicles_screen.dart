@@ -5,6 +5,7 @@ import '../services/vehicle_service.dart';
 import '../widgets/common_widgets.dart';
 import 'add_vehicle_screen.dart';
 import 'edit_vehicle_screen.dart';
+import 'availability_screen.dart';
 
 class OwnerVehiclesScreen extends StatefulWidget {
   const OwnerVehiclesScreen({super.key});
@@ -59,6 +60,12 @@ class _OwnerVehiclesScreenState extends State<OwnerVehiclesScreen> {
       MaterialPageRoute(builder: (_) => const AddVehicleScreen()),
     );
     if (created == true) _load();
+  }
+
+  Future<void> _goToAvailability(VehicleData vehicle) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => AvailabilityScreen(vehicle: vehicle)),
+    );
   }
 
   Future<void> _togglePause(VehicleData vehicle) async {
@@ -222,6 +229,7 @@ class _OwnerVehiclesScreenState extends State<OwnerVehiclesScreen> {
                                   onTap: () => _goToEdit(_filtered[i]),
                                   onPause: () => _togglePause(_filtered[i]),
                                   onDelete: () => _confirmDelete(_filtered[i]),
+                                  onAvailability: () => _goToAvailability(_filtered[i]),
                                 ),
                               ),
               ),
@@ -238,11 +246,13 @@ class _VehicleCard extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onPause;
   final VoidCallback onDelete;
+  final VoidCallback onAvailability;
   const _VehicleCard({
     required this.vehicle,
     required this.onTap,
     required this.onPause,
     required this.onDelete,
+    required this.onAvailability,
   });
 
   bool get _isActive => vehicle.status.toUpperCase() == 'ACTIVE';
@@ -285,11 +295,16 @@ class _VehicleCard extends StatelessWidget {
               onSelected: (value) {
                 if (value == 'pause') onPause();
                 if (value == 'delete') onDelete();
+                if (value == 'availability') onAvailability();
               },
               itemBuilder: (_) => [
                 PopupMenuItem(
                   value: 'pause',
                   child: Text(_isActive || _isAvailable ? 'Pausar' : 'Reactivar'),
+                ),
+                const PopupMenuItem(
+                  value: 'availability',
+                  child: Text('Disponibilidad'),
                 ),
                 const PopupMenuItem(
                   value: 'delete',
