@@ -17,6 +17,8 @@ import 'screens/chat_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/owner_main_screen.dart';
 import 'services/car_service.dart';
+import 'services/auth_service.dart';
+import 'models/vehicle_models.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,6 +27,7 @@ void main() async {
   await Hive.openBox('user_docs');
   await Hive.openBox('user_profile');
   await CarService().init();
+  await Hive.openBox('conversations_map');
   runApp(const Rent2GoApp());
 }
 
@@ -47,14 +50,28 @@ class Rent2GoApp extends StatelessWidget {
   }
 }
 
+const _renterPaths = ['/home', '/bookings', '/messages', '/profile', '/car-detail', '/confirm-booking'];
+const _ownerPaths = ['/owner'];
+
 final _router = GoRouter(
   redirect: (context, state) async {
     final prefs = await SharedPreferences.getInstance();
     final loggedIn = prefs.getBool('is_logged_in') ?? false;
     final path = state.uri.path;
     final publicPaths = ['/login', '/register', '/account-type', '/validate', '/recover'];
-    if (!loggedIn && !publicPaths.any((p) => path.startsWith(p))) {
-      return '/login';
+
+    if (!loggedIn) {
+      if (!publicPaths.any((p) => path.startsWith(p))) return '/login';
+      return null;
+    }
+
+    final accountType = await AuthService.getAccountType();
+
+    if (accountType == 'OWNER' && _renterPaths.any((p) => path.startsWith(p))) {
+      return '/owner';
+    }
+    if (accountType == 'RENTER' && _ownerPaths.any((p) => path.startsWith(p))) {
+      return '/home';
     }
     return null;
   },
@@ -65,18 +82,18 @@ final _router = GoRouter(
     GoRoute(path: '/account-type', builder: (_, __) => const AccountTypeScreen()),
     GoRoute(path: '/validate', builder: (_, __) => const ValidateAccountScreen()),
     GoRoute(path: '/recover', builder: (_, __) => const RecoverPasswordScreen()),
+
     GoRoute(path: '/home', builder: (_, __) => const ExploreScreen()),
     GoRoute(path: '/bookings', builder: (_, __) => const BookingsScreen()),
     GoRoute(path: '/messages', builder: (_, __) => const MessagesScreen()),
     GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
-    GoRoute(path: '/owner', builder: (_, __) => const OwnerMainScreen()),
     GoRoute(
       path: '/car-detail',
-      builder: (context, state) => CarDetailScreen(car: state.extra as CarData),
+      builder: (context, state) => CarDetailScreen(vehicle: state.extra as VehicleData),
     ),
     GoRoute(
       path: '/confirm-booking',
-      builder: (context, state) => ConfirmBookingScreen(car: state.extra as CarData),
+      builder: (context, state) => ConfirmBookingScreen(vehicle: state.extra as VehicleData),
     ),
     GoRoute(
       path: '/chat',
@@ -86,8 +103,14 @@ final _router = GoRouter(
           name: extra['name'] as String,
           car: extra['car'] as String,
           isOnline: extra['isOnline'] as bool,
+          ownerId: extra['ownerId'] as int,
+          renterId: extra['renterId'] as int,
+          vehicleId: extra['vehicleId'] as int?,
+          reservationId: extra['reservationId'] as int?,
         );
       },
     ),
+
+    GoRoute(path: '/owner', builder: (_, __) => const OwnerMainScreen()),
   ],
 );

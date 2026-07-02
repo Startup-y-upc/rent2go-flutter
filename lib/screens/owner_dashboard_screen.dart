@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import '../widgets/common_widgets.dart';
-import '../services/car_service.dart';
-import 'explore_screen.dart';
+import '../services/auth_service.dart';
+import '../services/vehicle_service.dart';
+import '../models/vehicle_models.dart';
 
 class OwnerDashboardScreen extends StatefulWidget {
   const OwnerDashboardScreen({super.key});
@@ -14,6 +15,34 @@ class OwnerDashboardScreen extends StatefulWidget {
 
 class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   bool _requestHandled = false;
+  String _firstName = '';
+  List<VehicleData> _vehicles = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUser();
+    _loadVehicles();
+  }
+
+  Future<void> _loadUser() async {
+    final user = await AuthService.getCurrentUser();
+    if (mounted && user != null) {
+      final name = user.fullName.trim().isNotEmpty
+          ? user.fullName.trim().split(RegExp(r'\s+')).first
+          : (user.username.isNotEmpty ? user.username : 'Usuario');
+      setState(() => _firstName = name);
+    }
+  }
+
+  Future<void> _loadVehicles() async {
+    try {
+      final vehicles = await VehicleService.getMyVehicles();
+      if (mounted) setState(() => _vehicles = vehicles);
+    } catch (_) {
+      // El dashboard sigue funcionando con el conteo en 0 si falla la carga.
+    }
+  }
 
   void _showFeedback(String message, {bool isError = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -27,61 +56,65 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     );
   }
 
+  Future<void> _openChatWithRenter() async {
+    final me = await AuthService.getCurrentUser();
+    final myId = me?.userId ?? 0;
+    if (!mounted) return;
+    context.push('/chat', extra: {
+      'name': 'Marta L.',
+      'car': 'Tesla Model 3',
+      'isOnline': true,
+      // El usuario actual es el "owner" en este flujo (vista propietario).
+      'ownerId': myId,
+      'renterId': 6, // id de ejemplo de la renter Marta L.
+      'vehicleId': 1,
+      'reservationId': null,
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF0F4F8),
-      body: ValueListenableBuilder<List<CarData>>(
-        valueListenable: CarService().carsNotifier,
-        builder: (context, cars, _) {
-          final myCars = cars.where((c) => c.owner == 'Diego Sánchez').toList();
-          return RefreshIndicator(
-            onRefresh: () async => await Future.delayed(const Duration(seconds: 1)),
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildHeader(context),
-                  Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildStatsRow(myCars.length.toString()),
-                        const SizedBox(height: 24),
-                        const Text(
-                          'Hoy - 12 May',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        _buildTodayActivityCard(),
-                        const SizedBox(height: 24),
-                        if (!_requestHandled) ...[
-                          const Text(
-                            'Solicitudes pendientes',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          _buildPendingRequestCard(),
-                        ],
-                        const SizedBox(height: 100),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
+      body: RefreshIndicator(
+        onRefresh: () async {
+          await Future.wait([_loadUser(), _loadVehicles()]);
         },
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildHeader(context),
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildStatsRow(_vehicles.length.toString()),
+                    const SizedBox(height: 24),
+                    const Text(
+                      'Hoy - 12 May',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black),
+                    ),
+                    const SizedBox(height: 12),
+                    _buildTodayActivityCard(),
+                    const SizedBox(height: 24),
+                    if (!_requestHandled) ...[
+                      const Text(
+                        'Solicitudes pendientes',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black),
+                      ),
+                      const SizedBox(height: 12),
+                      _buildPendingRequestCard(),
+                    ],
+                    const SizedBox(height: 100),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -100,7 +133,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Hola, Diego',
+                'Hola, $_firstName',
                 style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 14),
               ),
               const SizedBox(height: 4),
@@ -181,32 +214,13 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
       ),
       child: Column(
         children: [
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Colors.black,
-            ),
-          ),
+          Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black)),
           const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey.shade500,
-            ),
-          ),
+          Text(label, style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
         ],
       ),
     );
@@ -218,13 +232,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
       ),
       child: Column(
         children: [
@@ -259,9 +267,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                 borderRadius: BorderRadius.circular(12),
                 child: CachedNetworkImage(
                   imageUrl: 'https://images.unsplash.com/photo-1560958089-b8a1929cea89?w=200&q=80',
-                  width: 80,
-                  height: 60,
-                  fit: BoxFit.cover,
+                  width: 80, height: 60, fit: BoxFit.cover,
                 ),
               ),
               const SizedBox(width: 12),
@@ -299,13 +305,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
             children: [
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: () {
-                    context.push('/chat', extra: {
-                      'name': 'Marta L.',
-                      'car': 'Tesla Model 3',
-                      'isOnline': true,
-                    });
-                  },
+                  onPressed: _openChatWithRenter,
                   icon: const Icon(Icons.chat_bubble_outline, size: 18),
                   label: const Text('Mensaje'),
                   style: OutlinedButton.styleFrom(
@@ -319,9 +319,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               const SizedBox(width: 12),
               Expanded(
                 child: ElevatedButton(
-                  onPressed: () {
-                    _showDeliveryDialog();
-                  },
+                  onPressed: _showDeliveryDialog,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: kCyan,
                     foregroundColor: Colors.black,
@@ -380,42 +378,24 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
       ),
       child: Column(
         children: [
           Row(
             children: [
-              const CircleAvatar(
-                radius: 20,
-                backgroundImage: NetworkImage('https://i.pravatar.cc/150?u=carlos'),
-              ),
+              const CircleAvatar(radius: 20, backgroundImage: NetworkImage('https://i.pravatar.cc/150?u=carlos')),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Carlos R.',
-                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
-                    ),
-                    Text(
-                      'Mini Cooper S · 15 May → 17 May',
-                      style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-                    ),
+                    const Text('Carlos R.', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black)),
+                    Text('Mini Cooper S · 15 May → 17 May', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
                   ],
                 ),
               ),
-              const Text(
-                '76 €',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black),
-              ),
+              const Text('76 €', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black)),
             ],
           ),
           const SizedBox(height: 16),

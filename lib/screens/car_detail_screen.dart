@@ -1,12 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../models/vehicle_models.dart';
+import '../services/auth_service.dart';
 import '../widgets/common_widgets.dart';
-import 'explore_screen.dart';
 
 class CarDetailScreen extends StatelessWidget {
-  final CarData car;
-  const CarDetailScreen({super.key, required this.car});
+  final VehicleData vehicle;
+  const CarDetailScreen({super.key, required this.vehicle});
+
+  Future<void> _openChat(BuildContext context) async {
+    final me = await AuthService.getCurrentUser();
+    final myId = me?.userId ?? 0;
+    if (!context.mounted) return;
+    context.push('/chat', extra: {
+      'name': 'Propietario',
+      'car': vehicle.name,
+      'isOnline': false,
+      'ownerId': vehicle.ownerId,
+      'renterId': myId,
+      'vehicleId': vehicle.id,
+      'reservationId': null,
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -20,36 +36,16 @@ class CarDetailScreen extends StatelessWidget {
               children: [
                 Stack(
                   children: [
-                    CachedNetworkImage(
-                      imageUrl: car.imageUrl,
-                      height: 280,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      placeholder: (_, __) => Container(
-                        height: 280,
-                        color: Colors.grey[200],
-                        child: const Center(child: CircularProgressIndicator()),
-                      ),
-                      errorWidget: (_, __, ___) => Container(
-                        height: 280,
-                        color: const Color(0xFF1A1A2E),
-                        child: const Center(
-                          child: Icon(Icons.directions_car,
-                              color: Colors.white30, size: 80)),
-                      ),
-                    ),
-                    Positioned(
-                      top: 48, left: 16,
-                      child: _CircleBtn(icon: Icons.arrow_back, onTap: () => context.pop()),
-                    ),
-                    Positioned(
-                      top: 48, right: 56,
-                      child: _CircleBtn(icon: Icons.share_outlined, onTap: () {}),
-                    ),
-                    Positioned(
-                      top: 48, right: 16,
-                      child: _CircleBtn(icon: Icons.favorite_border, onTap: () {}),
-                    ),
+                    vehicle.primaryImageUrl != null && vehicle.primaryImageUrl!.isNotEmpty
+                        ? CachedNetworkImage(
+                            imageUrl: vehicle.primaryImageUrl!, height: 280, width: double.infinity, fit: BoxFit.cover,
+                            placeholder: (_, __) => Container(height: 280, color: Colors.grey[200], child: const Center(child: CircularProgressIndicator())),
+                            errorWidget: (_, __, ___) => Container(height: 280, color: const Color(0xFF1A1A2E), child: const Center(child: Icon(Icons.directions_car, color: Colors.white30, size: 80))),
+                          )
+                        : Container(height: 280, color: const Color(0xFF1A1A2E), child: const Center(child: Icon(Icons.directions_car, color: Colors.white30, size: 80))),
+                    Positioned(top: 48, left: 16, child: _CircleBtn(icon: Icons.arrow_back, onTap: () => context.pop())),
+                    Positioned(top: 48, right: 56, child: _CircleBtn(icon: Icons.share_outlined, onTap: () {})),
+                    Positioned(top: 48, right: 16, child: _CircleBtn(icon: Icons.favorite_border, onTap: () {})),
                   ],
                 ),
                 Padding(
@@ -59,126 +55,76 @@ class CarDetailScreen extends StatelessWidget {
                     children: [
                       Row(children: [
                         _Badge(
-                          label: car.fuel,
-                          color: car.fuel == 'Eléctrico'
-                              ? const Color(0xFFE8F5E9)
-                              : const Color(0xFFFFF8E1),
-                          textColor: car.fuel == 'Eléctrico'
-                              ? const Color(0xFF2E7D32)
-                              : const Color(0xFFF57F17),
+                          label: vehicle.fuelType ?? '—',
+                          color: (vehicle.fuelType ?? '').toUpperCase() == 'ELECTRIC' ? const Color(0xFFE8F5E9) : const Color(0xFFFFF8E1),
+                          textColor: (vehicle.fuelType ?? '').toUpperCase() == 'ELECTRIC' ? const Color(0xFF2E7D32) : const Color(0xFFF57F17),
                         ),
-                        const SizedBox(width: 10),
-                        const Icon(Icons.star, color: Colors.amber, size: 16),
-                        const SizedBox(width: 4),
-                        Text(car.rating.toString(),
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                        const SizedBox(width: 4),
-                        Text('· ${car.trips} viajes',
-                            style: TextStyle(color: Colors.grey[500], fontSize: 13)),
                       ]),
                       const SizedBox(height: 10),
-                      Text(car.name,
-                          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black)),
+                      Text(vehicle.name, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black)),
                       const SizedBox(height: 4),
-                      Text('${car.type} · ${car.year}',
-                          style: TextStyle(color: Colors.grey[500], fontSize: 14)),
+                      Text('${vehicle.categoryName} · ${vehicle.year}', style: TextStyle(color: Colors.grey[500], fontSize: 14)),
                       const SizedBox(height: 6),
                       Row(children: [
                         const Icon(Icons.location_on_outlined, size: 14, color: Colors.grey),
                         const SizedBox(width: 4),
-                        Text(car.address,
-                            style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                        Expanded(child: Text(vehicle.location, style: TextStyle(color: Colors.grey[500], fontSize: 12))),
                       ]),
                       const SizedBox(height: 20),
                       Container(
                         padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[50],
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.grey.shade200),
-                        ),
+                        decoration: BoxDecoration(color: Colors.grey[50], borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade200)),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceAround,
                           children: [
-                            _SpecItem(
-                              icon: car.fuel == 'Eléctrico' ? Icons.bolt : Icons.local_gas_station_outlined,
-                              label: car.range == '–' ? car.fuel : car.range,
-                              sublabel: car.fuel == 'Eléctrico' ? 'Autonomía' : 'Combustible',
-                            ),
+                            _SpecItem(icon: Icons.people_outline, label: '${vehicle.seats ?? "—"}', sublabel: 'Plazas'),
                             _Divider(),
-                            _SpecItem(icon: Icons.people_outline, label: '${car.seats}', sublabel: 'Plazas'),
+                            _SpecItem(icon: Icons.settings_outlined, label: vehicle.transmission ?? '—', sublabel: 'Cambio'),
                             _Divider(),
-                            _SpecItem(
-                              icon: Icons.settings_outlined,
-                              label: car.type.contains('Auto') ? 'Auto' : 'Manual',
-                              sublabel: 'Cambio',
-                            ),
+                            _SpecItem(icon: Icons.local_gas_station_outlined, label: vehicle.fuelType ?? '—', sublabel: 'Combustible'),
                           ],
                         ),
                       ),
                       const SizedBox(height: 20),
                       Container(
                         padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[50],
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.grey.shade200),
-                        ),
+                        decoration: BoxDecoration(color: Colors.grey[50], borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade200)),
                         child: Row(
                           children: [
-                            CircleAvatar(
-                              radius: 22,
-                              backgroundColor: Colors.teal.shade100,
-                              child: Text(
-                                car.owner.substring(0, 2).toUpperCase(),
-                                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.teal),
-                              ),
-                            ),
+                            CircleAvatar(radius: 22, backgroundColor: Colors.teal.shade100, child: const Icon(Icons.person, color: Colors.teal)),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Row(children: [
-                                    Text(car.owner,
-                                        style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.black)),
-                                    const SizedBox(width: 8),
-                                    Text('Verificado',
-                                        style: TextStyle(color: Colors.teal[400], fontSize: 12)),
-                                  ]),
-                                  Text('Anfitrión · Responde en ~1h',
-                                      style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                                  const Text('Propietario', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.black)),
+                                  Text('ID #${vehicle.ownerId}', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
                                 ],
                               ),
                             ),
                             OutlinedButton(
-                              onPressed: () {},
-                              style: OutlinedButton.styleFrom(
-                                side: BorderSide(color: Colors.grey.shade300),
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                minimumSize: Size.zero,
-                              ),
+                              onPressed: () => _openChat(context),
+                              style: OutlinedButton.styleFrom(side: BorderSide(color: Colors.grey.shade300), padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), minimumSize: Size.zero),
                               child: const Text('Mensaje', style: TextStyle(fontSize: 12, color: Colors.black)),
                             ),
                           ],
                         ),
                       ),
-                      const SizedBox(height: 16),
-                      Wrap(spacing: 8, runSpacing: 6, children: [
-                        _Badge(label: '✓ DNI verificado',
-                            color: const Color(0xFFE3F2FD), textColor: const Color(0xFF1565C0)),
-                        _Badge(label: '✓ Carnet validado',
-                            color: const Color(0xFFE3F2FD), textColor: const Color(0xFF1565C0)),
-                        _Badge(label: '✓ Teléfono',
-                            color: const Color(0xFFE3F2FD), textColor: const Color(0xFF1565C0)),
-                      ]),
                       const SizedBox(height: 20),
-                      const Text('SOBRE EL COCHE',
-                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold,
-                              color: Colors.grey, letterSpacing: 1)),
-                      const SizedBox(height: 8),
-                      Text(car.description,
-                          style: TextStyle(color: Colors.grey[700], fontSize: 14, height: 1.5)),
+                      if (vehicle.description != null && vehicle.description!.isNotEmpty) ...[
+                        const Text('SOBRE EL COCHE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1)),
+                        const SizedBox(height: 8),
+                        Text(vehicle.description!, style: TextStyle(color: Colors.grey[700], fontSize: 14, height: 1.5)),
+                      ],
+                      if (vehicle.features.isNotEmpty) ...[
+                        const SizedBox(height: 20),
+                        const Text('CARACTERÍSTICAS', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1)),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8, runSpacing: 8,
+                          children: vehicle.features.map((f) => Chip(label: Text(f, style: const TextStyle(fontSize: 12)), backgroundColor: Colors.grey[100])).toList(),
+                        ),
+                      ],
                       const SizedBox(height: 100),
                     ],
                   ),
@@ -190,32 +136,22 @@ class CarDetailScreen extends StatelessWidget {
             bottom: 0, left: 0, right: 0,
             child: Container(
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                border: Border(top: BorderSide(color: Colors.grey.shade200)),
-              ),
+              decoration: BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: Colors.grey.shade200))),
               child: Row(
                 children: [
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text('${car.price.toInt()}€/día',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black)),
-                      Text('2 días · Total ${(car.price * 2).toInt()}€',
-                          style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                      Text('${vehicle.dailyPrice.toInt()}€/día', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black)),
+                      Text('2 días · Total ${(vehicle.dailyPrice * 2).toInt()}€', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
                     ],
                   ),
                   const SizedBox(width: 16),
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: () => context.push('/confirm-booking', extra: car),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.black,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
+                      onPressed: () => context.push('/confirm-booking', extra: vehicle),
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.black, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
                       child: const Text('Reservar', style: TextStyle(fontWeight: FontWeight.bold)),
                     ),
                   ),
@@ -236,11 +172,7 @@ class _CircleBtn extends StatelessWidget {
   @override
   Widget build(BuildContext context) => GestureDetector(
     onTap: onTap,
-    child: Container(
-      width: 36, height: 36,
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18)),
-      child: Icon(icon, size: 18, color: Colors.black87),
-    ),
+    child: Container(width: 36, height: 36, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18)), child: Icon(icon, size: 18, color: Colors.black87)),
   );
 }
 
@@ -273,6 +205,5 @@ class _SpecItem extends StatelessWidget {
 
 class _Divider extends StatelessWidget {
   @override
-  Widget build(BuildContext context) =>
-      Container(width: 1, height: 40, color: Colors.grey.shade200);
+  Widget build(BuildContext context) => Container(width: 1, height: 40, color: Colors.grey.shade200);
 }
