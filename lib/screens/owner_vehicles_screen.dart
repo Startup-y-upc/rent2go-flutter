@@ -61,6 +61,61 @@ class _OwnerVehiclesScreenState extends State<OwnerVehiclesScreen> {
     if (created == true) _load();
   }
 
+  Future<void> _togglePause(VehicleData vehicle) async {
+    final isActive = vehicle.status.toUpperCase() == 'ACTIVE' ||
+        vehicle.status.toUpperCase() == 'AVAILABLE';
+    final newStatus = isActive ? 'MAINTENANCE' : 'AVAILABLE';
+    try {
+      await VehicleService.updateStatus(vehicle.id, newStatus);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(isActive ? 'Vehículo pausado' : 'Vehículo reactivado')),
+        );
+        _load();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No se pudo actualizar el estado del vehículo.')),
+        );
+      }
+    }
+  }
+
+  Future<void> _confirmDelete(VehicleData vehicle) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Eliminar vehículo'),
+        content: Text('¿Seguro que deseas eliminar "${vehicle.name}"? Esta acción no se puede deshacer.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Eliminar', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await VehicleService.deleteVehicle(vehicle.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Vehículo eliminado')),
+        );
+        _load();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final activeCount = _vehicles.where((v) => v.status.toUpperCase() == 'ACTIVE').length;
@@ -165,6 +220,8 @@ class _OwnerVehiclesScreenState extends State<OwnerVehiclesScreen> {
                                 itemBuilder: (_, i) => _VehicleCard(
                                   vehicle: _filtered[i],
                                   onTap: () => _goToEdit(_filtered[i]),
+                                  onPause: () => _togglePause(_filtered[i]),
+                                  onDelete: () => _confirmDelete(_filtered[i]),
                                 ),
                               ),
               ),
@@ -179,7 +236,14 @@ class _OwnerVehiclesScreenState extends State<OwnerVehiclesScreen> {
 class _VehicleCard extends StatelessWidget {
   final VehicleData vehicle;
   final VoidCallback onTap;
-  const _VehicleCard({required this.vehicle, required this.onTap});
+  final VoidCallback onPause;
+  final VoidCallback onDelete;
+  const _VehicleCard({
+    required this.vehicle,
+    required this.onTap,
+    required this.onPause,
+    required this.onDelete,
+  });
 
   bool get _isActive => vehicle.status.toUpperCase() == 'ACTIVE';
   bool get _isAvailable => vehicle.status.toUpperCase() == 'AVAILABLE';
@@ -214,7 +278,25 @@ class _VehicleCard extends StatelessWidget {
           Row(children: [
             Container(width: 6, height: 6, decoration: BoxDecoration(color: _statusColor, shape: BoxShape.circle)),
             const SizedBox(width: 6),
-            Text(_statusLabel, style: TextStyle(color: Colors.black54, fontSize: 12)),
+            Expanded(child: Text(_statusLabel, style: TextStyle(color: Colors.black54, fontSize: 12))),
+            PopupMenuButton<String>(
+              key: Key('vehicle_actions_menu_${vehicle.id}'),
+              icon: const Icon(Icons.more_vert, size: 20, color: Colors.black54),
+              onSelected: (value) {
+                if (value == 'pause') onPause();
+                if (value == 'delete') onDelete();
+              },
+              itemBuilder: (_) => [
+                PopupMenuItem(
+                  value: 'pause',
+                  child: Text(_isActive || _isAvailable ? 'Pausar' : 'Reactivar'),
+                ),
+                const PopupMenuItem(
+                  value: 'delete',
+                  child: Text('Eliminar', style: TextStyle(color: Colors.red)),
+                ),
+              ],
+            ),
           ]),
           const SizedBox(height: 10),
           ClipRRect(

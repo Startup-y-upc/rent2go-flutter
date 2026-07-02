@@ -200,4 +200,34 @@ class VehicleService {
       body: jsonEncode({'dailyPrice': dailyPrice}),
     );
   }
+
+  /// DELETE /api/v1/vehicles/{id} — elimina un vehículo del propietario.
+  /// El backend responde 409 si el vehículo tiene historial de reservas;
+  /// ese caso se traduce a un mensaje amigable para el usuario (US17).
+  static Future<void> deleteVehicle(int vehicleId) async {
+    final token = await AuthService.getToken();
+    final uri = Uri.parse('$baseUrl/vehicles/$vehicleId');
+    final response = await http.delete(
+      uri,
+      headers: {if (token != null) 'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200 || response.statusCode == 204) {
+      return;
+    }
+
+    if (response.statusCode == 409) {
+      throw Exception(
+          'No se puede eliminar: este vehículo tiene reservas asociadas.');
+    }
+
+    String message = 'No se pudo eliminar el vehículo';
+    try {
+      final body = jsonDecode(response.body);
+      if (body is Map && (body['message'] != null || body['error'] != null)) {
+        message = (body['message'] ?? body['error']).toString();
+      }
+    } catch (_) {}
+    throw Exception(message);
+  }
 }
