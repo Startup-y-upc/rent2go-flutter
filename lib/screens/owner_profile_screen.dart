@@ -1,13 +1,12 @@
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import '../models/user_model.dart';
+import '../models/vehicle_models.dart';
 import '../services/auth_service.dart';
+import '../services/vehicle_service.dart';
 import '../widgets/common_widgets.dart';
-import '../services/car_service.dart';
-import 'explore_screen.dart';
 
 class OwnerProfileScreen extends StatefulWidget {
   final VoidCallback onNavigateToEarnings;
@@ -330,16 +329,27 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
                 const SizedBox(height: 12),
 
                 _SectionCard(
-                  child: ValueListenableBuilder<List<CarData>>(
-                    valueListenable: CarService().carsNotifier,
-                    builder: (context, cars, _) {
-                      final myCars = cars.where((c) => c.owner == displayName).toList();
+                  child: FutureBuilder<List<VehicleData>>(
+                    future: VehicleService.getMyVehicles(),
+                    builder: (context, snapshot) {
+                      final myCars = snapshot.data ?? const <VehicleData>[];
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const Text('Mi negocio', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black)),
                           const SizedBox(height: 12),
-                          _buildBusinessSection(myCars),
+                          if (snapshot.connectionState == ConnectionState.waiting)
+                            const Padding(
+                              padding: EdgeInsets.all(16.0),
+                              child: Center(child: CircularProgressIndicator()),
+                            )
+                          else if (snapshot.hasError)
+                            const Padding(
+                              padding: EdgeInsets.all(16.0),
+                              child: Text('No se pudo cargar tus vehículos', style: TextStyle(color: Colors.grey)),
+                            )
+                          else
+                            _buildBusinessSection(myCars),
                         ],
                       );
                     },
@@ -379,7 +389,7 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
     );
   }
 
-  Widget _buildBusinessSection(List<CarData> myCars) {
+  Widget _buildBusinessSection(List<VehicleData> myCars) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -396,7 +406,11 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
               ]
             : myCars.map((car) => Column(
                 children: [
-                  _buildBusinessItem(car.name, 'Publicado', car.imageUrl),
+                  _buildBusinessItem(
+                    car.name,
+                    car.status,
+                    car.primaryImageUrl ?? 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?w=200&q=80',
+                  ),
                   if (car != myCars.last) const Divider(height: 1),
                 ],
               )).toList(),

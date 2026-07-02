@@ -3,7 +3,6 @@ import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/vehicle_models.dart';
 import '../services/auth_service.dart';
-import '../widgets/common_widgets.dart';
 
 class CarDetailScreen extends StatelessWidget {
   final VehicleData vehicle;

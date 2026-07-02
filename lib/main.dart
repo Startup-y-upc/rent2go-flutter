@@ -17,7 +17,6 @@ import 'screens/chat_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/owner_main_screen.dart';
 import 'screens/terms_screen.dart';
-import 'services/car_service.dart';
 import 'services/auth_service.dart';
 import 'models/vehicle_models.dart';
 
@@ -27,7 +26,6 @@ void main() async {
   await Hive.openBox('register_draft');
   await Hive.openBox('user_docs');
   await Hive.openBox('user_profile');
-  await CarService().init();
   await Hive.openBox('conversations_map');
   runApp(const Rent2GoApp());
 }
