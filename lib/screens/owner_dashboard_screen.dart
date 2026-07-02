@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import '../widgets/common_widgets.dart';
+import '../services/auth_service.dart';
 
 class OwnerDashboardScreen extends StatefulWidget {
   const OwnerDashboardScreen({super.key});
@@ -12,6 +13,23 @@ class OwnerDashboardScreen extends StatefulWidget {
 
 class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   bool _requestHandled = false;
+  String _firstName = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUser();
+  }
+
+  Future<void> _loadUser() async {
+    final user = await AuthService.getCurrentUser();
+    if (mounted && user != null) {
+      final name = user.fullName.trim().isNotEmpty
+          ? user.fullName.trim().split(RegExp(r'\s+')).first
+          : (user.username.isNotEmpty ? user.username : 'Usuario');
+      setState(() => _firstName = name);
+    }
+  }
 
   void _showFeedback(String message, {bool isError = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -23,6 +41,22 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
         margin: const EdgeInsets.all(16),
       ),
     );
+  }
+
+  Future<void> _openChatWithRenter() async {
+    final me = await AuthService.getCurrentUser();
+    final myId = me?.userId ?? 0;
+    if (!mounted) return;
+    context.push('/chat', extra: {
+      'name': 'Marta L.',
+      'car': 'Tesla Model 3',
+      'isOnline': true,
+      // El usuario actual es el "owner" en este flujo (vista propietario).
+      'ownerId': myId,
+      'renterId': 6, // id de ejemplo de la renter Marta L.
+      'vehicleId': 1,
+      'reservationId': null,
+    });
   }
 
   @override
@@ -46,11 +80,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                     const SizedBox(height: 24),
                     const Text(
                       'Today - 12 May',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black,
-                      ),
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black),
                     ),
                     const SizedBox(height: 12),
                     _buildTodayActivityCard(),
@@ -58,11 +88,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                     if (!_requestHandled) ...[
                       const Text(
                         'Pending Requests',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black,
-                        ),
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black),
                       ),
                       const SizedBox(height: 12),
                       _buildPendingRequestCard(),
@@ -79,79 +105,27 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   }
 
   Widget _buildHeader(BuildContext context) {
-    return Stack(
-      children: [
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(24, 60, 24, 32),
-          decoration: const BoxDecoration(
-            color: Color(0xFF1B1B2F),
-            borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Hello, Diego',
-                style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 14),
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Control Panel',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 24),
-              Text(
-                'Earnings - this month',
-                style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 14),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                '1,284.50 €',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                height: 40,
-                width: double.infinity,
-                child: CustomPaint(
-                  painter: _ChartPainter(),
-                ),
-              ),
-            ],
-          ),
-        ),
-        Positioned(
-          top: 60,
-          right: 24,
-          child: GestureDetector(
-            onTap: () => context.go('/home'),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.white10,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white24),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.swap_horiz, color: Colors.white, size: 16),
-                  SizedBox(width: 4),
-                  Text('Renter', style: TextStyle(color: Colors.white, fontSize: 12)),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(24, 60, 24, 32),
+      decoration: const BoxDecoration(
+        color: Color(0xFF1B1B2F),
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Hello, $_firstName', style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 14)),
+          const SizedBox(height: 4),
+          const Text('Control Panel', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 24),
+          Text('Earnings - this month', style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 14)),
+          const SizedBox(height: 8),
+          const Text('1,284.50 €', style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 20),
+          SizedBox(height: 40, width: double.infinity, child: CustomPaint(painter: _ChartPainter())),
+        ],
+      ),
     );
   }
 
@@ -173,32 +147,13 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
       ),
       child: Column(
         children: [
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Colors.black,
-            ),
-          ),
+          Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black)),
           const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey.shade500,
-            ),
-          ),
+          Text(label, style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
         ],
       ),
     );
@@ -210,13 +165,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
       ),
       child: Column(
         children: [
@@ -224,24 +173,11 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE0F7FA),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: const Text(
-                  'Pickup - 10:00',
-                  style: TextStyle(
-                    color: Color(0xFF00ACC1),
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                decoration: BoxDecoration(color: const Color(0xFFE0F7FA), borderRadius: BorderRadius.circular(20)),
+                child: const Text('Pickup - 10:00', style: TextStyle(color: Color(0xFF00ACC1), fontSize: 12, fontWeight: FontWeight.bold)),
               ),
               const Spacer(),
-              Text(
-                'in 2 hours',
-                style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
-              ),
+              Text('in 2 hours', style: TextStyle(color: Colors.grey.shade400, fontSize: 12)),
             ],
           ),
           const SizedBox(height: 16),
@@ -251,9 +187,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                 borderRadius: BorderRadius.circular(12),
                 child: CachedNetworkImage(
                   imageUrl: 'https://images.unsplash.com/photo-1560958089-b8a1929cea89?w=200&q=80',
-                  width: 80,
-                  height: 60,
-                  fit: BoxFit.cover,
+                  width: 80, height: 60, fit: BoxFit.cover,
                 ),
               ),
               const SizedBox(width: 12),
@@ -261,26 +195,9 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Tesla Model 3',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15,
-                        color: Colors.black,
-                      ),
-                    ),
-                    Text(
-                      '@Marta L.',
-                      style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-                    ),
-                    Text(
-                      '2 days - 95.00 €',
-                      style: TextStyle(
-                        color: Colors.grey.shade800,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
-                      ),
-                    ),
+                    const Text('Tesla Model 3', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black)),
+                    Text('@Marta L.', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                    Text('2 days - 95.00 €', style: TextStyle(color: Colors.grey.shade800, fontWeight: FontWeight.w600, fontSize: 13)),
                   ],
                 ),
               ),
@@ -291,13 +208,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
             children: [
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: () {
-                    context.push('/chat', extra: {
-                      'name': 'Marta L.',
-                      'car': 'Tesla Model 3',
-                      'isOnline': true,
-                    });
-                  },
+                  onPressed: _openChatWithRenter,
                   icon: const Icon(Icons.chat_bubble_outline, size: 18),
                   label: const Text('Message'),
                   style: OutlinedButton.styleFrom(
@@ -311,9 +222,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               const SizedBox(width: 12),
               Expanded(
                 child: ElevatedButton(
-                  onPressed: () {
-                    _showDeliveryDialog();
-                  },
+                  onPressed: _showDeliveryDialog,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.black,
                     foregroundColor: Colors.white,
@@ -337,10 +246,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
         title: const Text('Confirm Delivery', style: TextStyle(color: Colors.black)),
         content: const Text('Are you at the meeting point with the customer?', style: TextStyle(color: Colors.black87)),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel', style: TextStyle(color: Colors.grey))),
           TextButton(
             onPressed: () {
               Navigator.pop(context);
@@ -359,42 +265,24 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
       ),
       child: Column(
         children: [
           Row(
             children: [
-              const CircleAvatar(
-                radius: 20,
-                backgroundImage: NetworkImage('https://i.pravatar.cc/150?u=carlos'),
-              ),
+              const CircleAvatar(radius: 20, backgroundImage: NetworkImage('https://i.pravatar.cc/150?u=carlos')),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Carlos R.',
-                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
-                    ),
-                    Text(
-                      'Mini Cooper S · 15 May → 17 May',
-                      style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-                    ),
+                    const Text('Carlos R.', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black)),
+                    Text('Mini Cooper S · 15 May → 17 May', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
                   ],
                 ),
               ),
-              const Text(
-                '76 €',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black),
-              ),
+              const Text('76 €', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black)),
             ],
           ),
           const SizedBox(height: 16),
@@ -406,10 +294,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                     setState(() => _requestHandled = true);
                     _showFeedback('Booking declined');
                   },
-                  child: Text(
-                    'Decline',
-                    style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.bold),
-                  ),
+                  child: Text('Decline', style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.bold)),
                 ),
               ),
               const SizedBox(width: 12),
@@ -446,18 +331,8 @@ class _ChartPainter extends CustomPainter {
 
     final path = Path();
     path.moveTo(0, size.height * 0.8);
-    path.quadraticBezierTo(
-      size.width * 0.25,
-      size.height * 0.4,
-      size.width * 0.5,
-      size.height * 0.6,
-    );
-    path.quadraticBezierTo(
-      size.width * 0.75,
-      size.height * 0.8,
-      size.width,
-      size.height * 0.2,
-    );
+    path.quadraticBezierTo(size.width * 0.25, size.height * 0.4, size.width * 0.5, size.height * 0.6);
+    path.quadraticBezierTo(size.width * 0.75, size.height * 0.8, size.width, size.height * 0.2);
 
     canvas.drawPath(path, paint);
 

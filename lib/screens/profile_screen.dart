@@ -1,7 +1,13 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:image_picker/image_picker.dart';
+import '../models/user_model.dart';
 import '../services/auth_service.dart';
+import 'explore_screen.dart' show BottomNavBar;
+
+const kCyan = Color(0xFF00E5FF);
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -10,193 +16,365 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  int _tab = 3;
+  UserModel? _user;
+  bool _loading = true;
+  bool _editing = false;
+  bool _saving = false;
+  String? _errorMsg;
+
+  final _nameCtrl = TextEditingController();
+  final _phoneCtrl = TextEditingController();
+  Uint8List? _newImageBytes;
+  final _picker = ImagePicker();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUser();
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _phoneCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadUser() async {
+    final cached = await AuthService.getCurrentUser();
+    if (cached != null && mounted) {
+      setState(() {
+        _user = cached;
+        _loading = false;
+        _syncControllers();
+      });
+    }
+
+    final fresh = await AuthService.fetchCurrentUser();
+    if (fresh != null && mounted) {
+      setState(() {
+        _user = fresh;
+        _loading = false;
+        _syncControllers();
+      });
+    } else if (cached == null && mounted) {
+      setState(() => _loading = false);
+    }
+  }
+
+  void _syncControllers() {
+    _nameCtrl.text = _user?.fullName ?? '';
+    _phoneCtrl.text = _user?.phone ?? '';
+  }
+
+  void _goToBottomNav(int i) {
+    switch (i) {
+      case 0: context.go('/home'); break;
+      case 1: context.go('/bookings'); break;
+      case 2: context.go('/messages'); break;
+      case 3: context.go('/profile'); break;
+    }
+  }
+
+  Future<void> _pickImage() async {
+    final img = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+    if (img == null) return;
+    final bytes = await img.readAsBytes();
+    setState(() => _newImageBytes = bytes);
+  }
+
+  Future<void> _save() async {
+    if (_nameCtrl.text.trim().isEmpty) {
+      setState(() => _errorMsg = 'El nombre no puede estar vacío');
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _errorMsg = null;
+    });
+
+    try {
+      final updated = await AuthService.updateProfile(
+        fullName: _nameCtrl.text.trim(),
+        phone: _phoneCtrl.text.trim(),
+        profileImageBytes: _newImageBytes,
+        imageFilename: 'profile.jpg',
+      );
+      if (mounted) {
+        setState(() {
+          _user = updated;
+          _saving = false;
+          _editing = false;
+          _newImageBytes = null;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Perfil actualizado'), backgroundColor: Colors.green),
+        );
+      }
+    } on AuthException catch (e) {
+      setState(() {
+        _saving = false;
+        _errorMsg = e.message;
+      });
+    } catch (e) {
+      setState(() {
+        _saving = false;
+        _errorMsg = 'No se pudo conectar al servidor.';
+      });
+    }
+  }
+
+  void _cancelEdit() {
+    setState(() {
+      _editing = false;
+      _newImageBytes = null;
+      _errorMsg = null;
+      _syncControllers();
+    });
+  }
+
+  String _initials(String fullName) {
+    final parts = fullName.trim().split(RegExp(r'\s+'));
+    if (parts.isEmpty || parts.first.isEmpty) return '?';
+    if (parts.length == 1) return parts.first.substring(0, 1).toUpperCase();
+    return (parts.first.substring(0, 1) + parts.last.substring(0, 1)).toUpperCase();
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) {
+      return const Scaffold(
+        backgroundColor: Color(0xFFF0F4F8),
+        body: Center(child: CircularProgressIndicator(color: kCyan)),
+      );
+    }
+
+    final user = _user;
+    final displayName = user?.fullName.isNotEmpty == true ? user!.fullName : 'Usuario';
+    final email = user?.email ?? '';
+    final accountType = user?.accountType ?? '';
+    final emailVerified = user?.emailVerified ?? false;
+    final phoneVerified = user?.phoneVerified ?? false;
+    // DNI y Carnet de conducir se muestran como verificados de forma estática
+    // (no dependen de ningún dato real del backend, son solo visuales por ahora).
+    final verifiedCount = (emailVerified ? 1 : 0) + (phoneVerified ? 1 : 0) + 2;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF0F4F8),
       body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            children: [
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.fromLTRB(20, 24, 20, 28),
-                decoration: const BoxDecoration(
-                  color: Color(0xFF0D1B2A),
-                  borderRadius:
-                      BorderRadius.vertical(bottom: Radius.circular(24)),
-                ),
-                child: Column(
-                  children: [
-                    Stack(
-                      children: [
-                        CircleAvatar(
-                          radius: 40,
-                          backgroundColor: Colors.white24,
-                          child: const Icon(Icons.person,
-                              size: 44, color: Colors.white70),
+        child: RefreshIndicator(
+          onRefresh: _loadUser,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: Column(
+              children: [
+                // ── Header ───────────────────────────────────────────────
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 28),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF0D1B2A),
+                    borderRadius: BorderRadius.vertical(bottom: Radius.circular(24)),
+                  ),
+                  child: Column(
+                    children: [
+                      GestureDetector(
+                        onTap: _editing ? _pickImage : null,
+                        child: Stack(
+                          children: [
+                            CircleAvatar(
+                              radius: 40,
+                              backgroundColor: Colors.white24,
+                              backgroundImage: _newImageBytes != null
+                                  ? MemoryImage(_newImageBytes!)
+                                  : (user?.profileImageUrl != null && user!.profileImageUrl!.isNotEmpty)
+                                      ? NetworkImage(user.profileImageUrl!) as ImageProvider
+                                      : null,
+                              child: (_newImageBytes == null && (user?.profileImageUrl == null || user!.profileImageUrl!.isEmpty))
+                                  ? Text(_initials(displayName), style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold))
+                                  : null,
+                            ),
+                            Positioned(
+                              bottom: 0, right: 0,
+                              child: Container(
+                                width: 26, height: 26,
+                                decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                                child: const Icon(Icons.camera_alt, size: 14, color: Colors.black),
+                              ),
+                            ),
+                          ],
                         ),
-                        Positioned(
-                          bottom: 0,
-                          right: 0,
-                          child: Container(
-                            width: 26,
-                            height: 26,
-                            decoration: const BoxDecoration(
-                                color: Colors.white,
-                                shape: BoxShape.circle),
-                            child: const Icon(Icons.camera_alt,
-                                size: 14, color: Colors.black),
+                      ),
+                      const SizedBox(height: 14),
+                      Text(displayName, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 4),
+                      Text(
+                        accountType == 'OWNER' ? 'Propietario' : (accountType == 'RENTER' ? 'Arrendatario' : 'Usuario Rent2Go'),
+                        style: const TextStyle(color: Colors.white54, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // ── Confianza y verificación (diseño mejorado) ───────────
+                _SectionCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.shield_outlined, color: verifiedCount == 4 ? kCyan : Colors.grey, size: 22),
+                          const SizedBox(width: 8),
+                          const Text('Confianza y verificación', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black)),
+                          const Spacer(),
+                          Text('$verifiedCount / 4', style: TextStyle(color: verifiedCount == 4 ? kCyan : Colors.grey[500], fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      LinearProgressIndicator(
+                        value: verifiedCount / 4,
+                        backgroundColor: Colors.grey.shade100,
+                        color: kCyan,
+                        minHeight: 4,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                      const SizedBox(height: 14),
+                      const _VerifyRow(label: 'Identidad (DNI)', verified: true),
+                      const _VerifyRow(label: 'Carnet de conducir', verified: true),
+                      _VerifyRow(label: 'Email y teléfono', verified: emailVerified && phoneVerified),
+                      const _VerifyRow(label: 'Foto de perfil', verified: false, action: 'Verificar'),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // ── Mis datos (editable) ──────────────────────────────────
+                _SectionCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Text('Mis datos', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black)),
+                          const Spacer(),
+                          if (!_editing)
+                            TextButton.icon(
+                              onPressed: () => setState(() => _editing = true),
+                              icon: const Icon(Icons.edit_outlined, size: 16),
+                              label: const Text('Editar'),
+                              style: TextButton.styleFrom(foregroundColor: kCyan, padding: EdgeInsets.zero),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+
+                      if (_errorMsg != null) ...[
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(10),
+                          margin: const EdgeInsets.only(bottom: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.redAccent.withOpacity(0.3)),
                           ),
+                          child: Text(_errorMsg!, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
                         ),
                       ],
-                    ),
-                    const SizedBox(height: 14),
-                    const Text('Diego Sánchez',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 4),
-                    const Text('Miembro desde 2023',
-                        style:
-                            TextStyle(color: Colors.white54, fontSize: 13)),
-                    const SizedBox(height: 20),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        _StatItem(value: '18', label: 'Viajes'),
-                        _divider(),
-                        _StatItem(value: '4.92', label: 'Valoración'),
-                        _divider(),
-                        _StatItem(value: '100%', label: 'Aceptación'),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
 
-              _SectionCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Text('Confianza y verificación',
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 15,
-                                color: Colors.black)),
-                        const Spacer(),
-                        Text('3 / 4',
-                            style: TextStyle(
-                                color: Colors.blue[600],
-                                fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-                    _VerifyRow(label: 'Identidad (DNI)', verified: true),
-                    _VerifyRow(label: 'Carnet de conducir', verified: true),
-                    _VerifyRow(label: 'Email y teléfono', verified: true),
-                    _VerifyRow(
-                        label: 'Foto de perfil',
-                        verified: false,
-                        action: 'Verificar'),
-                  ],
+                      _editing
+                          ? Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _EditableField(label: 'Nombre completo', controller: _nameCtrl),
+                                const SizedBox(height: 12),
+                                _EditableField(
+                                  label: 'Teléfono',
+                                  controller: _phoneCtrl,
+                                  keyboardType: TextInputType.number,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly,
+                                    LengthLimitingTextInputFormatter(9),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                _StaticField(label: 'Correo electrónico', value: email.isNotEmpty ? email : '—'),
+                                const SizedBox(height: 16),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: OutlinedButton(
+                                        onPressed: _saving ? null : _cancelEdit,
+                                        style: OutlinedButton.styleFrom(
+                                          side: BorderSide(color: Colors.grey.shade300),
+                                          padding: const EdgeInsets.symmetric(vertical: 12),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                        ),
+                                        child: const Text('Cancelar', style: TextStyle(color: Colors.black)),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: ElevatedButton(
+                                        onPressed: _saving ? null : _save,
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: kCyan,
+                                          foregroundColor: Colors.black,
+                                          padding: const EdgeInsets.symmetric(vertical: 12),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                        ),
+                                        child: _saving
+                                            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                                            : const Text('Guardar', style: TextStyle(fontWeight: FontWeight.bold)),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            )
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _StaticField(label: 'Nombre completo', value: displayName),
+                                _StaticField(label: 'Correo electrónico', value: email.isNotEmpty ? email : '—'),
+                                _StaticField(label: 'Teléfono', value: user?.phone.isNotEmpty == true ? user!.phone : '—'),
+                                _StaticField(label: 'Usuario', value: user?.username.isNotEmpty == true ? user!.username : '—'),
+                              ],
+                            ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
+                const SizedBox(height: 12),
 
-              _SectionCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Editar datos personales',
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
-                            color: Colors.black)),
-                    const SizedBox(height: 16),
-                    _EditField(label: 'Nombre completo', value: 'Diego Sánchez'),
-                    _EditField(
-                        label: 'Correo electrónico',
-                        value: 'diego@email.com'),
-                    _EditField(label: 'Teléfono', value: '+34 612 345 678'),
-                    _EditField(label: 'Ciudad', value: 'Madrid, España'),
-                  ],
+                _SectionCard(
+                  child: Column(
+                    children: [
+                      _OptionRow(icon: Icons.notifications_outlined, label: 'Notificaciones'),
+                      const Divider(height: 1),
+                      _OptionRow(icon: Icons.lock_outline, label: 'Privacidad'),
+                      const Divider(height: 1),
+                      _OptionRow(icon: Icons.help_outline, label: 'Ayuda'),
+                      const Divider(height: 1),
+                      _OptionRow(
+                        icon: Icons.logout, label: 'Cerrar sesión', color: Colors.red,
+                        onTap: () async {
+                          await AuthService.logout();
+                          if (context.mounted) context.go('/login');
+                        },
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-
-              _SectionCard(
-                child: Column(
-                  children: [
-                    _OptionRow(
-                        icon: Icons.swap_horiz,
-                        label: 'Modo Propietario',
-                        onTap: () => context.go('/owner')),
-                    const Divider(height: 1),
-                    _OptionRow(
-                        icon: Icons.notifications_outlined,
-                        label: 'Notificaciones'),
-                    const Divider(height: 1),
-                    _OptionRow(
-                        icon: Icons.lock_outline, label: 'Privacidad'),
-                    const Divider(height: 1),
-                    _OptionRow(
-                        icon: Icons.help_outline, label: 'Ayuda'),
-                    const Divider(height: 1),
-                    _OptionRow(
-                      icon: Icons.logout,
-                      label: 'Cerrar sesión',
-                      color: Colors.red,
-                      onTap: () async {
-                        await AuthService.logout();
-                        if (context.mounted) context.go('/login');
-                      },
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-            ],
+                const SizedBox(height: 24),
+              ],
+            ),
           ),
         ),
       ),
-      bottomNavigationBar: _BottomNav(
-        current: _tab,
-        onTap: (i) {
-          setState(() => _tab = i);
-          if (i == 0) context.go('/home');
-          if (i == 1) context.go('/bookings');
-          if (i == 2) context.go('/messages');
-        },
-      ),
+      bottomNavigationBar: BottomNavBar(current: 3, onTap: _goToBottomNav),
     );
   }
-
-  Widget _divider() => Container(
-      width: 1, height: 36, color: Colors.white24);
-}
-
-class _StatItem extends StatelessWidget {
-  final String value, label;
-  const _StatItem({required this.value, required this.label});
-  @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      Text(value,
-          style: const TextStyle(
-              color: Colors.white,
-              fontSize: 22,
-              fontWeight: FontWeight.bold)),
-      Text(label,
-          style: const TextStyle(color: Colors.white54, fontSize: 12)),
-    ],
-  );
 }
 
 class _SectionCard extends StatelessWidget {
@@ -206,11 +384,7 @@ class _SectionCard extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     margin: const EdgeInsets.symmetric(horizontal: 20),
     padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: Colors.grey.shade200),
-    ),
+    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.grey.shade200)),
     child: child,
   );
 }
@@ -219,58 +393,80 @@ class _VerifyRow extends StatelessWidget {
   final String label;
   final bool verified;
   final String? action;
-  const _VerifyRow(
-      {required this.label, required this.verified, this.action});
+  const _VerifyRow({required this.label, required this.verified, this.action});
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 6),
     child: Row(
       children: [
-        Icon(
-          verified ? Icons.check_box : Icons.check_box_outline_blank,
-          color: verified ? Colors.black : Colors.grey,
-          size: 20,
-        ),
+        Icon(verified ? Icons.check_box : Icons.check_box_outline_blank, color: verified ? Colors.black : Colors.grey, size: 20),
         const SizedBox(width: 12),
-        Text(label,
-            style: const TextStyle(fontSize: 14, color: Colors.black)),
+        Text(label, style: const TextStyle(fontSize: 14, color: Colors.black)),
         const Spacer(),
-        if (action != null)
-          Text(action!,
-              style: TextStyle(
-                  color: Colors.blue[600],
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500)),
+        if (action != null && !verified)
+          Text(action!, style: TextStyle(color: Colors.blue[600], fontSize: 13, fontWeight: FontWeight.w500))
+        else
+          Text(verified ? 'Verificado' : 'Pendiente', style: TextStyle(color: verified ? Colors.green : Colors.orange[700], fontSize: 12, fontWeight: FontWeight.w500)),
       ],
     ),
   );
 }
 
-class _EditField extends StatelessWidget {
+class _StaticField extends StatelessWidget {
   final String label, value;
-  const _EditField({required this.label, required this.value});
+  const _StaticField({required this.label, required this.value});
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(bottom: 12),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label,
-            style: TextStyle(color: Colors.grey[400], fontSize: 11)),
+        Text(label, style: TextStyle(color: Colors.grey[400], fontSize: 11)),
         const SizedBox(height: 4),
         Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            color: Colors.grey.shade50,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.grey.shade200),
-          ),
-          child: Text(value,
-              style: const TextStyle(fontSize: 14, color: Colors.black)),
+          decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.grey.shade200)),
+          child: Text(value, style: const TextStyle(fontSize: 14, color: Colors.black)),
         ),
       ],
     ),
+  );
+}
+
+class _EditableField extends StatelessWidget {
+  final String label;
+  final TextEditingController controller;
+  final TextInputType keyboardType;
+  final List<TextInputFormatter>? inputFormatters;
+  const _EditableField({
+    required this.label,
+    required this.controller,
+    this.keyboardType = TextInputType.text,
+    this.inputFormatters,
+  });
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(label, style: TextStyle(color: Colors.grey[400], fontSize: 11)),
+      const SizedBox(height: 4),
+      TextField(
+        controller: controller,
+        keyboardType: keyboardType,
+        inputFormatters: inputFormatters,
+        style: const TextStyle(fontSize: 14, color: Colors.black),
+        decoration: InputDecoration(
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          filled: true,
+          fillColor: Colors.white,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: kCyan)),
+        ),
+      ),
+    ],
   );
 }
 
@@ -279,69 +475,13 @@ class _OptionRow extends StatelessWidget {
   final String label;
   final Color? color;
   final VoidCallback? onTap;
-  const _OptionRow(
-      {required this.icon, required this.label, this.color, this.onTap});
+  const _OptionRow({required this.icon, required this.label, this.color, this.onTap});
   @override
   Widget build(BuildContext context) => ListTile(
     contentPadding: EdgeInsets.zero,
     leading: Icon(icon, color: color ?? Colors.black, size: 22),
-    title: Text(label,
-        style: TextStyle(
-            color: color ?? Colors.black,
-            fontSize: 14,
-            fontWeight: FontWeight.w500)),
+    title: Text(label, style: TextStyle(color: color ?? Colors.black, fontSize: 14, fontWeight: FontWeight.w500)),
     trailing: const Icon(Icons.chevron_right, color: Colors.grey, size: 20),
     onTap: onTap ?? () {},
   );
-}
-
-class _BottomNav extends StatelessWidget {
-  final int current;
-  final ValueChanged<int> onTap;
-  const _BottomNav({required this.current, required this.onTap});
-  @override
-  Widget build(BuildContext context) {
-    final items = [
-      (Icons.explore_outlined, 'Explorar'),
-      (Icons.calendar_today_outlined, 'Reservas'),
-      (Icons.chat_bubble_outline, 'Mensajes'),
-      (Icons.person_outline, 'Perfil'),
-    ];
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: Colors.grey.shade200)),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Row(
-          children: items.asMap().entries.map((e) {
-            final active = e.key == current;
-            return Expanded(
-              child: GestureDetector(
-                onTap: () => onTap(e.key),
-                child: Container(
-                  color: Colors.transparent,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(e.value.$1,
-                          color: active ? Colors.black : Colors.grey,
-                          size: 22),
-                      const SizedBox(height: 4),
-                      Text(e.value.$2,
-                          style: TextStyle(
-                              fontSize: 11,
-                              color: active ? Colors.black : Colors.grey)),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          }).toList(),
-        ),
-      ),
-    );
-  }
 }

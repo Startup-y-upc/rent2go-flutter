@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import '../models/user_model.dart';
@@ -142,7 +143,9 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
     final email = user?.email ?? '';
     final emailVerified = user?.emailVerified ?? false;
     final phoneVerified = user?.phoneVerified ?? false;
-    final verifiedCount = (emailVerified ? 1 : 0) + (phoneVerified ? 1 : 0);
+    // DNI y Carnet de conducir se muestran como verificados de forma estática
+    // (no dependen de ningún dato real del backend, son solo visuales por ahora).
+    final verifiedCount = (emailVerified ? 1 : 0) + (phoneVerified ? 1 : 0) + 2;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF0F4F8),
@@ -224,18 +227,20 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.shield_outlined, color: verifiedCount == 2 ? kCyan : Colors.grey, size: 22),
+                          Icon(Icons.shield_outlined, color: verifiedCount == 4 ? kCyan : Colors.grey, size: 22),
                           const SizedBox(width: 8),
                           const Text('Confianza y verificación', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black)),
                           const Spacer(),
-                          Text('$verifiedCount / 2', style: TextStyle(color: verifiedCount == 2 ? kCyan : Colors.grey[500], fontWeight: FontWeight.bold)),
+                          Text('$verifiedCount / 4', style: TextStyle(color: verifiedCount == 4 ? kCyan : Colors.grey[500], fontWeight: FontWeight.bold)),
                         ],
                       ),
                       const SizedBox(height: 4),
-                      LinearProgressIndicator(value: verifiedCount / 2, backgroundColor: Colors.grey.shade100, color: kCyan, minHeight: 4, borderRadius: BorderRadius.circular(2)),
+                      LinearProgressIndicator(value: verifiedCount / 4, backgroundColor: Colors.grey.shade100, color: kCyan, minHeight: 4, borderRadius: BorderRadius.circular(2)),
                       const SizedBox(height: 14),
-                      _VerifyRow(label: 'Correo electrónico', verified: emailVerified),
-                      _VerifyRow(label: 'Teléfono', verified: phoneVerified),
+                      const _VerifyRow(label: 'Identidad (DNI)', verified: true),
+                      const _VerifyRow(label: 'Carnet de conducir', verified: true),
+                      _VerifyRow(label: 'Email y teléfono', verified: emailVerified && phoneVerified),
+                      const _VerifyRow(label: 'Foto de perfil', verified: false, action: 'Verificar'),
                     ],
                   ),
                 ),
@@ -274,7 +279,15 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
                               children: [
                                 _EditableField(label: 'Nombre completo', controller: _nameCtrl),
                                 const SizedBox(height: 12),
-                                _EditableField(label: 'Teléfono', controller: _phoneCtrl, keyboardType: TextInputType.phone),
+                                _EditableField(
+                                  label: 'Teléfono',
+                                  controller: _phoneCtrl,
+                                  keyboardType: TextInputType.number,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly,
+                                    LengthLimitingTextInputFormatter(9),
+                                  ],
+                                ),
                                 const SizedBox(height: 4),
                                 _StaticField(label: 'Correo electrónico', value: email.isNotEmpty ? email : '—'),
                                 const SizedBox(height: 16),
@@ -356,17 +369,21 @@ class _SectionCard extends StatelessWidget {
 class _VerifyRow extends StatelessWidget {
   final String label;
   final bool verified;
-  const _VerifyRow({required this.label, required this.verified});
+  final String? action;
+  const _VerifyRow({required this.label, required this.verified, this.action});
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 6),
     child: Row(
       children: [
-        Icon(verified ? Icons.check_circle : Icons.radio_button_unchecked, color: verified ? Colors.green : Colors.grey.shade400, size: 20),
+        Icon(verified ? Icons.check_box : Icons.check_box_outline_blank, color: verified ? Colors.black : Colors.grey, size: 20),
         const SizedBox(width: 12),
         Text(label, style: const TextStyle(fontSize: 14, color: Colors.black)),
         const Spacer(),
-        Text(verified ? 'Verificado' : 'Pendiente', style: TextStyle(color: verified ? Colors.green : Colors.orange[700], fontSize: 12, fontWeight: FontWeight.w500)),
+        if (action != null && !verified)
+          Text(action!, style: TextStyle(color: Colors.blue[600], fontSize: 13, fontWeight: FontWeight.w500))
+        else
+          Text(verified ? 'Verificado' : 'Pendiente', style: TextStyle(color: verified ? Colors.green : Colors.orange[700], fontSize: 12, fontWeight: FontWeight.w500)),
       ],
     ),
   );
@@ -398,7 +415,13 @@ class _EditableField extends StatelessWidget {
   final String label;
   final TextEditingController controller;
   final TextInputType keyboardType;
-  const _EditableField({required this.label, required this.controller, this.keyboardType = TextInputType.text});
+  final List<TextInputFormatter>? inputFormatters;
+  const _EditableField({
+    required this.label,
+    required this.controller,
+    this.keyboardType = TextInputType.text,
+    this.inputFormatters,
+  });
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -408,6 +431,7 @@ class _EditableField extends StatelessWidget {
       TextField(
         controller: controller,
         keyboardType: keyboardType,
+        inputFormatters: inputFormatters,
         style: const TextStyle(fontSize: 14, color: Colors.black),
         decoration: InputDecoration(
           isDense: true,
