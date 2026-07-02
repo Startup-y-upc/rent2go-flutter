@@ -149,6 +149,44 @@ class AuthService {
         statusCode: response.statusCode);
   }
 
+  /// POST /api/v1/auth/kyc/multipart — envía los documentos de verificación
+  /// (US07). Requiere una sesión activa (token + userId), por lo que debe
+  /// llamarse después de register()/login(), nunca antes.
+  static Future<void> submitKycMultipart({
+    required int userId,
+    required String fullName,
+    required String idNumber,
+    required Uint8List dniFrontBytes,
+    required Uint8List dniBackBytes,
+    Uint8List? driverLicenseBytes,
+  }) async {
+    final token = await getToken();
+    if (token == null) throw AuthException('No hay sesión activa');
+
+    final uri = Uri.parse('$baseUrl/auth/kyc/multipart');
+    final request = http.MultipartRequest('POST', uri);
+    request.headers['Authorization'] = 'Bearer $token';
+    request.fields['userId'] = userId.toString();
+    request.fields['fullName'] = fullName;
+    request.fields['idNumber'] = idNumber;
+
+    request.files.add(http.MultipartFile.fromBytes('dniFront', dniFrontBytes, filename: 'dni_front.jpg'));
+    request.files.add(http.MultipartFile.fromBytes('dniBack', dniBackBytes, filename: 'dni_back.jpg'));
+    if (driverLicenseBytes != null) {
+      request.files.add(http.MultipartFile.fromBytes('driverLicense', driverLicenseBytes, filename: 'driver_license.jpg'));
+    }
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return;
+    }
+
+    throw AuthException(_extractMessage(response, 'No se pudieron enviar los documentos de verificación'),
+        statusCode: response.statusCode);
+  }
+
   static String _extractMessage(http.Response response, String fallback) {
     try {
       final body = jsonDecode(response.body);

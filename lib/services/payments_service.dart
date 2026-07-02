@@ -29,6 +29,44 @@ class OwnerEarningsReport {
       OwnerEarningsReport(totalAmount: 0, paymentsCount: 0, currency: 'USD');
 }
 
+/// Métricas de desempeño de un vehículo (US24), obtenidas de
+/// GET /api/v1/payments/vehicles/{vehicleId}/performance.
+class VehiclePerformanceReport {
+  final int vehicleId;
+  final int reservationCount;
+  final double totalRevenue;
+  final String currency;
+  final double occupancyPercentage;
+
+  VehiclePerformanceReport({
+    required this.vehicleId,
+    required this.reservationCount,
+    required this.totalRevenue,
+    required this.currency,
+    required this.occupancyPercentage,
+  });
+
+  factory VehiclePerformanceReport.fromJson(Map<String, dynamic> json) {
+    return VehiclePerformanceReport(
+      vehicleId: (json['vehicleId'] as num?)?.toInt() ?? 0,
+      reservationCount: (json['reservationCount'] as num?)?.toInt() ?? 0,
+      totalRevenue: (json['totalRevenue'] as num?)?.toDouble() ?? 0.0,
+      currency: json['currency'] as String? ?? 'USD',
+      occupancyPercentage: (json['occupancyPercentage'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
+
+  /// Reporte vacío — se usa cuando la petición falla; se muestran ceros
+  /// en vez de romper la lista "Por vehículo" (mismo criterio que US24 owner earnings).
+  factory VehiclePerformanceReport.empty(int vehicleId) => VehiclePerformanceReport(
+        vehicleId: vehicleId,
+        reservationCount: 0,
+        totalRevenue: 0,
+        currency: 'USD',
+        occupancyPercentage: 0,
+      );
+}
+
 class PaymentsService {
   static const String baseUrl = 'https://rent2go-backend-production.up.railway.app/api/v1';
 
@@ -62,5 +100,41 @@ class PaymentsService {
     // Sin historial de pagos u otro estado no exitoso: no se muestra error,
     // se retorna un reporte vacío (US24 AC — cero, no falla).
     return OwnerEarningsReport.empty();
+  }
+
+  /// GET /api/v1/payments/vehicles/{vehicleId}/performance?from=...&to=...
+  /// Sin parámetros de fecha consulta todo el histórico del vehículo
+  /// (el backend usa la fecha de publicación del vehículo como inicio por defecto).
+  static Future<VehiclePerformanceReport> getVehiclePerformance({
+    required int vehicleId,
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    final token = await AuthService.getToken();
+
+    String fmt(DateTime d) =>
+        '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+    final queryParams = <String, String>{
+      if (from != null) 'from': fmt(from),
+      if (to != null) 'to': fmt(to),
+    };
+
+    final uri = Uri.parse('$baseUrl/payments/vehicles/$vehicleId/performance')
+        .replace(queryParameters: queryParams.isEmpty ? null : queryParams);
+
+    final response = await http.get(
+      uri,
+      headers: {if (token != null) 'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      return VehiclePerformanceReport.fromJson(data);
+    }
+
+    // Vehículo sin historial u otro estado no exitoso: cero, no falla,
+    // para no romper el listado "Por vehículo" de owner_earnings_screen.dart.
+    return VehiclePerformanceReport.empty(vehicleId);
   }
 }

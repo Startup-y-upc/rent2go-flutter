@@ -70,7 +70,7 @@ class _ValidateAccountScreenState extends State<ValidateAccountScreen> {
       final password = draft.get('password', defaultValue: '');
       final accountType = draft.get('accountType', defaultValue: 'RENTER');
 
-      await AuthService.register(
+      final user = await AuthService.register(
         email: email,
         password: password,
         username: email.split('@').first,
@@ -78,6 +78,39 @@ class _ValidateAccountScreenState extends State<ValidateAccountScreen> {
         phone: phone,
         accountType: accountType,
       );
+
+      // US07: envía los documentos de verificación capturados en esta pantalla
+      // al backend (POST /auth/kyc/multipart) ahora que ya existe una sesión
+      // (register() inicia sesión internamente). Antes de este cambio las
+      // imágenes se descartaban sin ser subidas nunca.
+      //
+      // ASSUMPTION — PENDING PRODUCT SIGN-OFF: el backend exige `idNumber`
+      // (número de documento) como campo obligatorio, pero el flujo de registro
+      // actual (register_screen.dart) no captura ese dato en ningún paso. Como
+      // fallback no bloqueante se usa el teléfono como idNumber provisional para
+      // no perder la subida de documentos; esto debe reemplazarse por un campo
+      // real de número de documento en el formulario de registro.
+      try {
+        await AuthService.submitKycMultipart(
+          userId: user.userId,
+          fullName: name,
+          idNumber: phone,
+          dniFrontBytes: _dniAnvBytes!,
+          dniBackBytes: _dniRevBytes!,
+          driverLicenseBytes: _licenciaBytes,
+        );
+      } catch (kycError) {
+        // No revertir el registro si falla el envío de KYC: la cuenta ya existe
+        // y el usuario puede reintentar la verificación después. Se informa sin
+        // bloquear la navegación.
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Tu cuenta fue creada, pero no se pudieron enviar los documentos de verificación. Podrás reintentarlo más tarde.'),
+            ),
+          );
+        }
+      }
 
       Hive.box('register_draft').clear();
       _docsBox.clear();
