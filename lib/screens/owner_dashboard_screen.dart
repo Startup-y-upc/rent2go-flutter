@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import '../widgets/common_widgets.dart';
+import '../services/car_service.dart';
+import 'explore_screen.dart';
 
 class OwnerDashboardScreen extends StatefulWidget {
   const OwnerDashboardScreen({super.key});
@@ -29,51 +31,57 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF0F4F8),
-      body: RefreshIndicator(
-        onRefresh: () async => await Future.delayed(const Duration(seconds: 1)),
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHeader(context),
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildStatsRow(),
-                    const SizedBox(height: 24),
-                    const Text(
-                      'Today - 12 May',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    _buildTodayActivityCard(),
-                    const SizedBox(height: 24),
-                    if (!_requestHandled) ...[
-                      const Text(
-                        'Pending Requests',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black,
+      body: ValueListenableBuilder<List<CarData>>(
+        valueListenable: CarService().carsNotifier,
+        builder: (context, cars, _) {
+          final myCars = cars.where((c) => c.owner == 'Diego Sánchez').toList();
+          return RefreshIndicator(
+            onRefresh: () async => await Future.delayed(const Duration(seconds: 1)),
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildHeader(context),
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildStatsRow(myCars.length.toString()),
+                        const SizedBox(height: 24),
+                        const Text(
+                          'Hoy - 12 May',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 12),
-                      _buildPendingRequestCard(),
-                    ],
-                    const SizedBox(height: 100),
-                  ],
-                ),
+                        const SizedBox(height: 12),
+                        _buildTodayActivityCard(),
+                        const SizedBox(height: 24),
+                        if (!_requestHandled) ...[
+                          const Text(
+                            'Solicitudes pendientes',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          _buildPendingRequestCard(),
+                        ],
+                        const SizedBox(height: 100),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -92,12 +100,12 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Hello, Diego',
+                'Hola, Diego',
                 style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 14),
               ),
               const SizedBox(height: 4),
               const Text(
-                'Control Panel',
+                'Panel de control',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 24,
@@ -106,12 +114,12 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               ),
               const SizedBox(height: 24),
               Text(
-                'Earnings - this month',
+                'Ingresos - este mes',
                 style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 14),
               ),
               const SizedBox(height: 8),
               const Text(
-                '1,284.50 €',
+                '1.284,50 €',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 32,
@@ -145,7 +153,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                 children: [
                   Icon(Icons.swap_horiz, color: Colors.white, size: 16),
                   SizedBox(width: 4),
-                  Text('Renter', style: TextStyle(color: Colors.white, fontSize: 12)),
+                  Text('Arrendatario', style: TextStyle(color: Colors.white, fontSize: 12)),
                 ],
               ),
             ),
@@ -155,12 +163,12 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     );
   }
 
-  Widget _buildStatsRow() {
+  Widget _buildStatsRow(String vehicleCount) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        _buildStatCard('3', 'Vehicles'),
-        _buildStatCard('5', 'Bookings'),
+        _buildStatCard(vehicleCount, 'Vehículos'),
+        _buildStatCard('5', 'Reservas'),
         _buildStatCard('4.9', 'Rating', isRating: true),
       ],
     );
@@ -229,7 +237,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: const Text(
-                  'Pickup - 10:00',
+                  'Recogida - 10:00',
                   style: TextStyle(
                     color: Color(0xFF00ACC1),
                     fontSize: 12,
@@ -239,7 +247,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               ),
               const Spacer(),
               Text(
-                'in 2 hours',
+                'en 2 horas',
                 style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
               ),
             ],
@@ -274,7 +282,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                       style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
                     ),
                     Text(
-                      '2 days - 95.00 €',
+                      '2 días - 95,00 €',
                       style: TextStyle(
                         color: Colors.grey.shade800,
                         fontWeight: FontWeight.w600,
@@ -299,7 +307,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                     });
                   },
                   icon: const Icon(Icons.chat_bubble_outline, size: 18),
-                  label: const Text('Message'),
+                  label: const Text('Mensaje'),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: Colors.black,
                     side: BorderSide(color: Colors.grey.shade200),
@@ -315,12 +323,12 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                     _showDeliveryDialog();
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.black,
-                    foregroundColor: Colors.white,
+                    backgroundColor: kCyan,
+                    foregroundColor: Colors.black,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
-                  child: const Text('Deliver Vehicle'),
+                  child: const Text('Entregar vehículo', style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
@@ -334,19 +342,32 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Confirm Delivery', style: TextStyle(color: Colors.black)),
-        content: const Text('Are you at the meeting point with the customer?', style: TextStyle(color: Colors.black87)),
+        backgroundColor: const Color(0xFF1B1B2F),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        title: const Text('Confirmar entrega',
+            style: TextStyle(
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.bold)),
+        content: const Text(
+          '¿Estás en el punto de encuentro con el cliente?',
+          style: TextStyle(color: Colors.white70, fontSize: 16),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            child: const Text('Cancelar', style: TextStyle(color: Colors.white54)),
           ),
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              _showFeedback('Starting delivery process...');
+              _showFeedback('Iniciando proceso de entrega...');
             },
-            child: const Text('Yes, I am here', style: TextStyle(color: kCyan, fontWeight: FontWeight.bold)),
+            child: const Text(
+              'Sí, estoy aquí',
+              style: TextStyle(
+                  color: kCyan, fontWeight: FontWeight.bold, fontSize: 16),
+            ),
           ),
         ],
       ),
@@ -404,10 +425,10 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                 child: TextButton(
                   onPressed: () {
                     setState(() => _requestHandled = true);
-                    _showFeedback('Booking declined');
+                    _showFeedback('Reserva rechazada');
                   },
                   child: Text(
-                    'Decline',
+                    'Rechazar',
                     style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -417,7 +438,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                 child: ElevatedButton(
                   onPressed: () {
                     setState(() => _requestHandled = true);
-                    _showFeedback('Booking accepted! Notification sent to Carlos.');
+                    _showFeedback('¡Reserva aceptada! Notificación enviada a Carlos.');
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: kCyan,
@@ -425,7 +446,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
-                  child: const Text('Accept Booking', style: TextStyle(fontWeight: FontWeight.bold)),
+                  child: const Text('Aceptar reserva', style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
@@ -440,23 +461,22 @@ class _ChartPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = kCyan.withOpacity(0.5)
+      ..color = kCyan.withOpacity(0.8)
       ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round
       ..style = PaintingStyle.stroke;
 
     final path = Path();
-    path.moveTo(0, size.height * 0.8);
-    path.quadraticBezierTo(
-      size.width * 0.25,
-      size.height * 0.4,
-      size.width * 0.5,
-      size.height * 0.6,
-    );
-    path.quadraticBezierTo(
-      size.width * 0.75,
+    path.moveTo(0, size.height * 0.75);
+
+    // Creates a smooth line that rises towards the end as in the design
+    path.cubicTo(
+      size.width * 0.3,
       size.height * 0.8,
+      size.width * 0.7,
+      size.height * 0.7,
       size.width,
-      size.height * 0.2,
+      size.height * 0.3,
     );
 
     canvas.drawPath(path, paint);
@@ -470,7 +490,7 @@ class _ChartPainter extends CustomPainter {
       ..shader = LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
-        colors: [kCyan.withOpacity(0.2), kCyan.withOpacity(0)],
+        colors: [kCyan.withOpacity(0.15), kCyan.withOpacity(0)],
       ).createShader(Rect.fromLTRB(0, 0, size.width, size.height));
 
     canvas.drawPath(fillPath, fillPaint);

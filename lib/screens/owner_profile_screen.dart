@@ -5,6 +5,8 @@ import 'package:image_picker/image_picker.dart';
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
 import '../widgets/common_widgets.dart';
+import '../services/car_service.dart';
+import 'explore_screen.dart';
 
 class OwnerProfileScreen extends StatefulWidget {
   final VoidCallback onNavigateToEarnings;
@@ -315,6 +317,24 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
                 const SizedBox(height: 12),
 
                 _SectionCard(
+                  child: ValueListenableBuilder<List<CarData>>(
+                    valueListenable: CarService().carsNotifier,
+                    builder: (context, cars, _) {
+                      final myCars = cars.where((c) => c.owner == displayName).toList();
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Mi negocio', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black)),
+                          const SizedBox(height: 12),
+                          _buildBusinessSection(myCars),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                _SectionCard(
                   child: Column(
                     children: [
                       _OptionRow(icon: Icons.notifications_outlined, label: 'Notificaciones'),
@@ -337,6 +357,44 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildBusinessSection(List<CarData> myCars) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        children: myCars.isEmpty
+            ? [
+                const Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Text('No hay vehículos registrados', style: TextStyle(color: Colors.grey)),
+                )
+              ]
+            : myCars.map((car) => Column(
+                children: [
+                  _buildBusinessItem(car.name, 'Publicado', car.imageUrl),
+                  if (car != myCars.last) const Divider(height: 1),
+                ],
+              )).toList(),
+      ),
+    );
+  }
+
+  Widget _buildBusinessItem(String title, String subtitle, String imageUrl) {
+    return ListTile(
+      leading: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Image.network(imageUrl, width: 48, height: 36, fit: BoxFit.cover),
+      ),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black)),
+      subtitle: Text(subtitle, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+      trailing: const Icon(Icons.chevron_right, size: 20),
+      onTap: () {},
     );
   }
 }

@@ -181,14 +181,43 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
             child: Row(
               children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(18),
+                GestureDetector(
+                  onTap: () {
+                    showModalBottomSheet(
+                      context: context,
+                      builder: (context) => SafeArea(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            ListTile(
+                              leading: const Icon(Icons.image),
+                              title: const Text('Enviar imagen'),
+                              onTap: () => Navigator.pop(context),
+                            ),
+                            ListTile(
+                              leading: const Icon(Icons.location_on),
+                              title: const Text('Compartir ubicación'),
+                              onTap: () => Navigator.pop(context),
+                            ),
+                            ListTile(
+                              leading: const Icon(Icons.insert_drive_file),
+                              title: const Text('Enviar documento'),
+                              onTap: () => Navigator.pop(context),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: const Icon(Icons.add, color: Colors.grey, size: 20),
                   ),
-                  child: const Icon(Icons.add, color: Colors.grey, size: 20),
                 ),
                 const SizedBox(width: 10),
                 Expanded(

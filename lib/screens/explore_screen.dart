@@ -4,6 +4,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../widgets/common_widgets.dart';
+import '../services/car_service.dart';
 
 class CarData {
   final String id, name, type, owner, fuel, range, imageUrl, address, description;
@@ -115,176 +116,181 @@ class _ExploreScreenState extends State<ExploreScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
-      body: Stack(
-        children: [
-          //Mapa OpenStreetMap
-          Positioned.fill(
-            bottom: 290,
-            child: FlutterMap(
-              mapController: _mapController,
-              options: const MapOptions(
-                initialCenter: _madridCenter,
-                initialZoom: 14,
-              ),
-              children: [
-                TileLayer(
-                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  userAgentPackageName: 'com.rent2go.app',
-                ),
-                MarkerLayer(
-                  markers: demoCars.asMap().entries.map((e) {
-                    final selected = _selectedCar == e.key;
-                    return Marker(
-                      point: e.value.location,
-                      width: selected ? 90 : 75,
-                      height: 40,
-                      child: GestureDetector(
-                        onTap: () => setState(() => _selectedCar = e.key),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: selected ? kCyan : Colors.black,
-                            borderRadius: BorderRadius.circular(20),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.3),
-                                blurRadius: 6,
-                                offset: const Offset(0, 2),
+    return ValueListenableBuilder<List<CarData>>(
+      valueListenable: CarService().carsNotifier,
+      builder: (context, cars, _) {
+        return Scaffold(
+          backgroundColor: const Color(0xFFF0F4F8),
+          body: Stack(
+            children: [
+              //Mapa OpenStreetMap
+              Positioned.fill(
+                bottom: 290,
+                child: FlutterMap(
+                  mapController: _mapController,
+                  options: const MapOptions(
+                    initialCenter: _madridCenter,
+                    initialZoom: 14,
+                  ),
+                  children: [
+                    TileLayer(
+                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.rent2go.app',
+                    ),
+                    MarkerLayer(
+                      markers: cars.asMap().entries.map((e) {
+                        final selected = _selectedCar == e.key;
+                        return Marker(
+                          point: e.value.location,
+                          width: selected ? 90 : 75,
+                          height: 40,
+                          child: GestureDetector(
+                            onTap: () => setState(() => _selectedCar = e.key),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: selected ? kCyan : Colors.black,
+                                borderRadius: BorderRadius.circular(20),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.3),
+                                    blurRadius: 6,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                          child: Text(
-                            '${e.value.price.toInt()}€/día',
-                            style: TextStyle(
-                              color: selected ? Colors.black : Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
+                              child: Text(
+                                '${e.value.price.toInt()}€/día',
+                                style: TextStyle(
+                                  color: selected ? Colors.black : Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                             ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
+              ),
+
+              Positioned(
+                top: 48,
+                left: 16,
+                right: 16,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                          color: Colors.black.withOpacity(0.12), blurRadius: 10)
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.search, color: Colors.grey, size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Madrid · Centro',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 14,
+                                    color: Colors.black)),
+                            Text('Mar 12 May → Jue 14 May',
+                                style: TextStyle(
+                                    color: Colors.grey[500], fontSize: 12)),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.tune, color: Colors.grey, size: 20),
+                    ],
+                  ),
+                ),
+              ),
+
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: Container(
+                  height: 300,
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                  ),
+                  child: Column(
+                    children: [
+                      Container(
+                        margin: const EdgeInsets.only(top: 10, bottom: 8),
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.grey[300],
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Row(
+                          children: [
+                            Text('${cars.length} coches cerca',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold, fontSize: 15,
+                                    color: Colors.black)),
+                            const Spacer(),
+                            Text('Ver todos',
+                                style: TextStyle(
+                                    color: kCyan,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500)),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Expanded(
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          itemCount: cars.length,
+                          itemBuilder: (_, i) => _CarCard(
+                            car: cars[i],
+                            selected: _selectedCar == i,
+                            onTap: () {
+                              setState(() => _selectedCar = i);
+                              _mapController.move(cars[i].location, 15);
+                            },
+                            onDetail: () =>
+                                context.push('/car-detail', extra: cars[i]),
                           ),
                         ),
                       ),
-                    );
-                  }).toList(),
+                      const SizedBox(height: 8),
+                    ],
+                  ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-
-          Positioned(
-            top: 48,
-            left: 16,
-            right: 16,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                      color: Colors.black.withOpacity(0.12), blurRadius: 10)
-                ],
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.search, color: Colors.grey, size: 20),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Madrid · Centro',
-                            style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 14,
-                                color: Colors.black)),
-                        Text('Mar 12 May → Jue 14 May',
-                            style: TextStyle(
-                                color: Colors.grey[500], fontSize: 12)),
-                      ],
-                    ),
-                  ),
-                  const Icon(Icons.tune, color: Colors.grey, size: 20),
-                ],
-              ),
-            ),
+          bottomNavigationBar: _BottomNav(
+            current: _tab,
+            onTap: (i) {
+              setState(() => _tab = i);
+              if (i == 1) context.go('/bookings');
+              if (i == 2) context.go('/messages');
+              if (i == 3) context.go('/profile');
+            },
           ),
-
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              height: 300,
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-              ),
-              child: Column(
-                children: [
-                  Container(
-                    margin: const EdgeInsets.only(top: 10, bottom: 8),
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[300],
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Row(
-                      children: [
-                        Text('${demoCars.length} coches cerca',
-                            style: const TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 15,
-                                color: Colors.black)),
-                        const Spacer(),
-                        Text('Ver todos',
-                            style: TextStyle(
-                                color: kCyan,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500)),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Expanded(
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: demoCars.length,
-                      itemBuilder: (_, i) => _CarCard(
-                        car: demoCars[i],
-                        selected: _selectedCar == i,
-                        onTap: () {
-                          setState(() => _selectedCar = i);
-                          _mapController.move(demoCars[i].location, 15);
-                        },
-                        onDetail: () =>
-                            context.push('/car-detail', extra: demoCars[i]),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-      bottomNavigationBar: _BottomNav(
-        current: _tab,
-        onTap: (i) {
-          setState(() => _tab = i);
-          if (i == 1) context.go('/bookings');
-          if (i == 2) context.go('/messages');
-          if (i == 3) context.go('/profile');
-        },
-      ),
+        );
+      },
     );
   }
 }
