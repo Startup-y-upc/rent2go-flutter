@@ -16,6 +16,7 @@ import 'screens/messages_screen.dart';
 import 'screens/chat_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/owner_main_screen.dart';
+import 'screens/terms_screen.dart';
 import 'services/car_service.dart';
 import 'services/auth_service.dart';
 import 'models/vehicle_models.dart';
@@ -58,7 +59,7 @@ final _router = GoRouter(
     final prefs = await SharedPreferences.getInstance();
     final loggedIn = prefs.getBool('is_logged_in') ?? false;
     final path = state.uri.path;
-    final publicPaths = ['/login', '/register', '/account-type', '/validate', '/recover'];
+    final publicPaths = ['/login', '/register', '/account-type', '/validate', '/recover', '/terms'];
 
     if (!loggedIn) {
       if (!publicPaths.any((p) => path.startsWith(p))) return '/login';
@@ -112,5 +113,7 @@ final _router = GoRouter(
     ),
 
     GoRoute(path: '/owner', builder: (_, __) => const OwnerMainScreen()),
+
+    GoRoute(path: '/terms', builder: (_, __) => const TermsScreen()),
   ],
 );

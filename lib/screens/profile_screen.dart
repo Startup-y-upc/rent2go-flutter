@@ -354,6 +354,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       const Divider(height: 1),
                       _OptionRow(icon: Icons.lock_outline, label: 'Privacidad'),
                       const Divider(height: 1),
+                      _OptionRow(
+                        icon: Icons.description_outlined,
+                        label: 'Términos y Condiciones',
+                        onTap: () => context.push('/terms'),
+                      ),
+                      const Divider(height: 1),
                       _OptionRow(icon: Icons.help_outline, label: 'Ayuda'),
                       const Divider(height: 1),
                       _OptionRow(

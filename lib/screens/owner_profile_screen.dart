@@ -352,6 +352,12 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
                     children: [
                       _OptionRow(icon: Icons.notifications_outlined, label: 'Notificaciones'),
                       const Divider(height: 1),
+                      _OptionRow(
+                        icon: Icons.description_outlined,
+                        label: 'Términos y Condiciones',
+                        onTap: () => context.push('/terms'),
+                      ),
+                      const Divider(height: 1),
                       _OptionRow(icon: Icons.help_outline, label: 'Ayuda'),
                       const Divider(height: 1),
                       _OptionRow(
