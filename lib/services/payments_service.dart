@@ -8,18 +8,26 @@ class OwnerEarningsReport {
   final double totalAmount;
   final int paymentsCount;
   final String currency;
+  final int availablePayoutCents;
+  final int pendingPayoutCents;
 
   OwnerEarningsReport({
     required this.totalAmount,
     required this.paymentsCount,
     required this.currency,
+    this.availablePayoutCents = 0,
+    this.pendingPayoutCents = 0,
   });
+
+  double get availablePayoutAmount => availablePayoutCents / 100.0;
 
   factory OwnerEarningsReport.fromJson(Map<String, dynamic> json) {
     return OwnerEarningsReport(
       totalAmount: (json['totalAmount'] as num?)?.toDouble() ?? 0.0,
       paymentsCount: (json['paymentsCount'] as num?)?.toInt() ?? 0,
       currency: json['currency'] as String? ?? 'USD',
+      availablePayoutCents: (json['availablePayoutCents'] as num?)?.toInt() ?? 0,
+      pendingPayoutCents: (json['pendingPayoutCents'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -148,6 +156,106 @@ class PaymentIntentResult {
 class PaymentException implements Exception {
   final String message;
   PaymentException(this.message);
+  @override
+  String toString() => message;
+}
+
+/// EarningsMovementResource exacto del backend (US47/TS12):
+/// GET /payments/owners/{ownerId}/earnings/movements.
+class EarningsMovement {
+  final int? reservationId;
+  final int amountCents;
+  final String? status;
+  final String? createdAt;
+
+  EarningsMovement({
+    required this.reservationId,
+    required this.amountCents,
+    required this.status,
+    required this.createdAt,
+  });
+
+  double get amount => amountCents / 100.0;
+
+  factory EarningsMovement.fromJson(Map<String, dynamic> json) {
+    return EarningsMovement(
+      reservationId: (json['reservationId'] as num?)?.toInt(),
+      amountCents: (json['amountCents'] as num?)?.toInt() ?? 0,
+      status: json['status']?.toString(),
+      createdAt: json['createdAt']?.toString(),
+    );
+  }
+}
+
+/// WithdrawalResource exacto del backend (US48/US49).
+class WithdrawalData {
+  final int id;
+  final int ownerId;
+  final int amountCents;
+  final String? payoutDestinationNote;
+  final String? status;
+  final String? requestedAt;
+
+  WithdrawalData({
+    required this.id,
+    required this.ownerId,
+    required this.amountCents,
+    this.payoutDestinationNote,
+    this.status,
+    this.requestedAt,
+  });
+
+  double get amount => amountCents / 100.0;
+
+  factory WithdrawalData.fromJson(Map<String, dynamic> json) {
+    return WithdrawalData(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      ownerId: (json['ownerId'] as num?)?.toInt() ?? 0,
+      amountCents: (json['amountCents'] as num?)?.toInt() ?? 0,
+      payoutDestinationNote: json['payoutDestinationNote']?.toString(),
+      status: json['status']?.toString(),
+      requestedAt: json['requestedAt']?.toString(),
+    );
+  }
+}
+
+class PagedWithdrawals {
+  final List<WithdrawalData> content;
+  final int page;
+  final int size;
+  final int totalElements;
+  final int totalPages;
+
+  PagedWithdrawals({
+    required this.content,
+    required this.page,
+    required this.size,
+    required this.totalElements,
+    required this.totalPages,
+  });
+
+  factory PagedWithdrawals.fromJson(Map<String, dynamic> json) {
+    return PagedWithdrawals(
+      content: (json['content'] as List? ?? [])
+          .map((e) => WithdrawalData.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      page: (json['page'] as num?)?.toInt() ?? 1,
+      size: (json['size'] as num?)?.toInt() ?? 20,
+      totalElements: (json['totalElements'] as num?)?.toInt() ?? 0,
+      totalPages: (json['totalPages'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  factory PagedWithdrawals.empty() =>
+      PagedWithdrawals(content: [], page: 1, size: 20, totalElements: 0, totalPages: 0);
+}
+
+/// Excepción específica de retiros — distingue el caso de saldo insuficiente
+/// (400 del backend) para mostrar un mensaje claro y accionable.
+class WithdrawalException implements Exception {
+  final String message;
+  final bool insufficientBalance;
+  WithdrawalException(this.message, {this.insufficientBalance = false});
   @override
   String toString() => message;
 }
@@ -299,5 +407,100 @@ class PaymentsService {
     // Vehículo sin historial u otro estado no exitoso: cero, no falla,
     // para no romper el listado "Por vehículo" de owner_earnings_screen.dart.
     return VehiclePerformanceReport.empty(vehicleId);
+  }
+
+  /// GET /api/v1/payments/owners/{ownerId}/earnings/movements?from=...&to=...
+  /// US47/TS12: reemplaza el placeholder "Desglose mensual: próximamente".
+  static Future<List<EarningsMovement>> getEarningsMovements({
+    required int ownerId,
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    final token = await AuthService.getToken();
+    String fmt(DateTime d) =>
+        '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+    final queryParams = <String, String>{
+      if (from != null) 'from': fmt(from),
+      if (to != null) 'to': fmt(to),
+    };
+    final uri = Uri.parse('$baseUrl/payments/owners/$ownerId/earnings/movements')
+        .replace(queryParameters: queryParams.isEmpty ? null : queryParams);
+    final response = await http.get(
+      uri,
+      headers: {if (token != null) 'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body) as List<dynamic>;
+      return data.map((e) => EarningsMovement.fromJson(e as Map<String, dynamic>)).toList();
+    }
+    if (response.statusCode == 403) {
+      throw PaymentException('No tienes permiso para ver estos movimientos.');
+    }
+    throw PaymentException('No se pudo cargar el desglose de movimientos.');
+  }
+
+  /// POST /api/v1/payments/owners/{ownerId}/withdrawals — US48/US49.
+  /// (CreateWithdrawalRequest exacto: amountCents + payoutDestinationNote).
+  static Future<WithdrawalData> requestWithdrawal({
+    required int ownerId,
+    required int amountCents,
+    String? payoutDestinationNote,
+  }) async {
+    final token = await AuthService.getToken();
+    final uri = Uri.parse('$baseUrl/payments/owners/$ownerId/withdrawals');
+    final response = await http.post(
+      uri,
+      headers: {
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'amountCents': amountCents,
+        if (payoutDestinationNote != null && payoutDestinationNote.isNotEmpty)
+          'payoutDestinationNote': payoutDestinationNote,
+      }),
+    );
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return WithdrawalData.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    }
+    if (response.statusCode == 403) {
+      throw WithdrawalException('No tienes permiso para retirar de esta cuenta.');
+    }
+    if (response.statusCode == 400) {
+      throw WithdrawalException(
+        'El monto solicitado supera tu saldo disponible o no es válido.',
+        insufficientBalance: true,
+      );
+    }
+    throw WithdrawalException('No se pudo procesar el retiro. Intenta nuevamente.');
+  }
+
+  /// GET /api/v1/payments/owners/{ownerId}/withdrawals — US49, historial paginado.
+  static Future<PagedWithdrawals> getWithdrawalHistory({
+    required int ownerId,
+    int page = 1,
+    int size = 20,
+  }) async {
+    final token = await AuthService.getToken();
+    final queryParams = <String, String>{
+      'page': page.toString(),
+      'size': size.toString(),
+    };
+    final uri = Uri.parse('$baseUrl/payments/owners/$ownerId/withdrawals').replace(queryParameters: queryParams);
+    final response = await http.get(
+      uri,
+      headers: {if (token != null) 'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      return PagedWithdrawals.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    }
+    if (response.statusCode == 403) {
+      throw WithdrawalException('No tienes permiso para ver este historial.');
+    }
+    return PagedWithdrawals.empty();
   }
 }

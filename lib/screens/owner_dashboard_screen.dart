@@ -158,6 +158,28 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     }
   }
 
+  /// US37: confirma la entrega real del vehículo — POST /reservations/{id}/activate.
+  Future<void> _activateReservation(ReservationData r) async {
+    try {
+      await ReservationService.activateReservation(r.id);
+      _showFeedback('Entrega del vehículo confirmada.');
+      await _loadReservations();
+    } catch (e) {
+      _showFeedback('No se pudo confirmar la entrega del vehículo.', isError: true);
+    }
+  }
+
+  /// US37: confirma la devolución del vehículo — POST /reservations/{id}/confirm-return.
+  Future<void> _confirmReturn(ReservationData r) async {
+    try {
+      await ReservationService.confirmReturn(id: r.id, actorId: _myId);
+      _showFeedback('Devolución del vehículo confirmada.');
+      await _loadReservations();
+    } catch (e) {
+      _showFeedback('No se pudo confirmar la devolución del vehículo.', isError: true);
+    }
+  }
+
   ReservationData? get _nextUpcoming {
     final upcoming = _reservations.where((r) =>
         ['CONFIRMED', 'ACTIVE'].contains(r.status.toUpperCase())).toList()
@@ -285,23 +307,47 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
         Positioned(
           top: 60,
           right: 24,
-          child: GestureDetector(
-            onTap: () => context.go('/home'),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.white10,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white24),
+          child: Row(
+            children: [
+              GestureDetector(
+                key: const Key('owner_dashboard_history_button'),
+                onTap: () => context.push('/owner/reservation-history'),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.white10,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.white24),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.history, color: Colors.white, size: 16),
+                      SizedBox(width: 4),
+                      Text('Historial', style: TextStyle(color: Colors.white, fontSize: 12)),
+                    ],
+                  ),
+                ),
               ),
-              child: const Row(
-                children: [
-                  Icon(Icons.swap_horiz, color: Colors.white, size: 16),
-                  SizedBox(width: 4),
-                  Text('Arrendatario', style: TextStyle(color: Colors.white, fontSize: 12)),
-                ],
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: () => context.go('/home'),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.white10,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.white24),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.swap_horiz, color: Colors.white, size: 16),
+                      SizedBox(width: 4),
+                      Text('Arrendatario', style: TextStyle(color: Colors.white, fontSize: 12)),
+                    ],
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
         ),
       ],
@@ -339,6 +385,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   }
 
   Widget _buildTodayActivityCard(ReservationData reservation) {
+    final isActive = reservation.status.toUpperCase() == 'ACTIVE';
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -433,15 +480,21 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               ),
               const SizedBox(width: 12),
               Expanded(
+                key: Key('owner_dashboard_lifecycle_action_${reservation.id}'),
                 child: ElevatedButton(
-                  onPressed: () => _showDeliveryDialog(reservation),
+                  onPressed: isActive
+                      ? () => _showReturnDialog(reservation)
+                      : () => _showDeliveryDialog(reservation),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: kCyan,
                     foregroundColor: Colors.black,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
-                  child: const Text('Entregar vehículo', style: TextStyle(fontWeight: FontWeight.bold)),
+                  child: Text(
+                    isActive ? 'Confirmar devolución' : 'Entregar vehículo',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
                 ),
               ),
             ],
@@ -472,14 +525,50 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
             child: const Text('Cancelar', style: TextStyle(color: Colors.white54)),
           ),
           TextButton(
+            key: const Key('confirm_delivery_button'),
             onPressed: () {
               Navigator.pop(context);
-              _showFeedback('Iniciando proceso de entrega...');
+              _activateReservation(reservation);
             },
             child: const Text(
               'Sí, estoy aquí',
               style: TextStyle(
                   color: kCyan, fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// US37: diálogo de confirmación de devolución, mismo patrón visual que
+  /// _showDeliveryDialog — llama a POST /reservations/{id}/confirm-return.
+  void _showReturnDialog(ReservationData reservation) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1B1B2F),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        title: const Text('Confirmar devolución',
+            style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+        content: const Text(
+          '¿El cliente ha devuelto el vehículo en el punto acordado?',
+          style: TextStyle(color: Colors.white70, fontSize: 16),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar', style: TextStyle(color: Colors.white54)),
+          ),
+          TextButton(
+            key: const Key('confirm_return_button'),
+            onPressed: () {
+              Navigator.pop(context);
+              _confirmReturn(reservation);
+            },
+            child: const Text(
+              'Sí, fue devuelto',
+              style: TextStyle(color: kCyan, fontWeight: FontWeight.bold, fontSize: 16),
             ),
           ),
         ],

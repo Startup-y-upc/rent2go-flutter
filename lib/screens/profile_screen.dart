@@ -572,7 +572,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 _SectionCard(
                   child: Column(
                     children: [
-                      _OptionRow(icon: Icons.notifications_outlined, label: 'Notificaciones'),
+                      _OptionRow(
+                        icon: Icons.notifications_outlined,
+                        label: 'Notificaciones',
+                        onTap: () => context.push('/notifications'),
+                      ),
                       const Divider(height: 1),
                       _OptionRow(icon: Icons.lock_outline, label: 'Privacidad'),
                       const Divider(height: 1),

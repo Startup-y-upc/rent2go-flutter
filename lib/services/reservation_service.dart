@@ -241,4 +241,62 @@ class ReservationService {
     }
     throw ReservationException('No se pudo rechazar la reserva.');
   }
+
+  /// POST /api/v1/reservations/{id}/activate — US37: transiciona una reserva
+  /// CONFIRMED a ACTIVE (entrega del vehículo). Sin body; 400 si la transición
+  /// no es válida (ReservationController.activateReservation exacto).
+  static Future<ReservationData> activateReservation(int id) async {
+    final token = await AuthService.getToken();
+    final uri = Uri.parse('$baseUrl/reservations/$id/activate');
+    final response = await http.post(uri, headers: _authHeaders(token));
+    if (response.statusCode == 200) {
+      return ReservationData.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    }
+    throw ReservationException('No se pudo confirmar la entrega del vehículo.');
+  }
+
+  /// POST /api/v1/reservations/{id}/confirm-return — US37: transiciona una
+  /// reserva ACTIVE a completada tras la devolución (ConfirmReturnResource
+  /// exacto: solo requiere actorId).
+  static Future<ReservationData> confirmReturn({
+    required int id,
+    required int actorId,
+  }) async {
+    final token = await AuthService.getToken();
+    final uri = Uri.parse('$baseUrl/reservations/$id/confirm-return');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders(token),
+      body: jsonEncode({'actorId': actorId}),
+    );
+    if (response.statusCode == 200) {
+      return ReservationData.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    }
+    throw ReservationException('No se pudo confirmar la devolución del vehículo.');
+  }
+
+  /// GET /api/v1/reservations/owner/paged — US36: historial paginado de
+  /// reservas del owner (repository pagination real, distinto del endpoint
+  /// /reservations/owner ya usado por owner_dashboard_screen.dart).
+  static Future<PagedReservations> getOwnerReservationHistory({
+    required int ownerId,
+    String? status,
+    int page = 1,
+    int size = 20,
+  }) async {
+    final token = await AuthService.getToken();
+    final queryParams = <String, String>{
+      'ownerId': ownerId.toString(),
+      'page': page.toString(),
+      'size': size.toString(),
+      if (status != null) 'status': status,
+    };
+    final uri = Uri.parse('$baseUrl/reservations/owner/paged').replace(queryParameters: queryParams);
+    final response = await http.get(uri, headers: _authHeaders(token));
+
+    if (response.statusCode == 200) {
+      return PagedReservations.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    }
+    return PagedReservations.empty();
+  }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'owner_invoices_screen.dart';
+import 'withdrawal_history_screen.dart';
 import '../widgets/common_widgets.dart';
 import '../services/auth_service.dart';
 import '../services/payments_service.dart';
@@ -30,19 +31,25 @@ class OwnerEarningsScreen extends StatefulWidget {
 class _OwnerEarningsScreenState extends State<OwnerEarningsScreen> {
   bool _loading = true;
   bool _loadingVehicles = true;
+  bool _loadingMovements = true;
+  String? _movementsError;
   OwnerEarningsReport _report = OwnerEarningsReport.empty();
   List<_VehicleEarningsRow> _vehicleRows = [];
+  List<EarningsMovement> _movements = [];
+  int? _ownerId;
 
   @override
   void initState() {
     super.initState();
     _load();
     _loadVehiclePerformance();
+    _loadMovements();
   }
 
   Future<void> _load() async {
     setState(() => _loading = true);
     final user = await AuthService.getCurrentUser();
+    _ownerId = user?.userId;
     final report = user != null
         ? await PaymentsService.getOwnerEarnings(ownerId: user.userId)
         : OwnerEarningsReport.empty();
@@ -52,6 +59,151 @@ class _OwnerEarningsScreenState extends State<OwnerEarningsScreen> {
         _loading = false;
       });
     }
+  }
+
+  /// US47: reemplaza el placeholder "Desglose mensual: próximamente" con
+  /// datos reales de GET /payments/owners/{id}/earnings/movements.
+  Future<void> _loadMovements() async {
+    setState(() {
+      _loadingMovements = true;
+      _movementsError = null;
+    });
+    final user = await AuthService.getCurrentUser();
+    if (user == null) {
+      if (mounted) {
+        setState(() {
+          _loadingMovements = false;
+          _movementsError = 'No hay sesión activa.';
+        });
+      }
+      return;
+    }
+    try {
+      final movements = await PaymentsService.getEarningsMovements(ownerId: user.userId);
+      if (mounted) {
+        setState(() {
+          _movements = movements;
+          _loadingMovements = false;
+        });
+      }
+    } on PaymentException catch (e) {
+      if (mounted) {
+        setState(() {
+          _loadingMovements = false;
+          _movementsError = e.message;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _loadingMovements = false;
+          _movementsError = 'No se pudo cargar el desglose de movimientos.';
+        });
+      }
+    }
+  }
+
+  /// US48/US49: abre el flujo de confirmación de retiro (monto vs. saldo
+  /// disponible) y llama a POST /payments/owners/{id}/withdrawals.
+  Future<void> _openWithdrawDialog() async {
+    final ownerId = _ownerId;
+    if (ownerId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No hay sesión activa.'), backgroundColor: Colors.redAccent),
+      );
+      return;
+    }
+    final amountCtrl = TextEditingController();
+    final noteCtrl = TextEditingController();
+    bool submitting = false;
+    String? dialogError;
+
+    await showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: const Text('Solicitar retiro'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Saldo disponible: \$${_report.availablePayoutAmount.toStringAsFixed(2)} ${_report.currency}'),
+              const SizedBox(height: 12),
+              TextField(
+                key: const Key('withdrawal_amount_field'),
+                controller: amountCtrl,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(labelText: 'Monto a retirar (USD)', border: OutlineInputBorder()),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                key: const Key('withdrawal_note_field'),
+                controller: noteCtrl,
+                decoration: const InputDecoration(labelText: 'Nota de destino (opcional)', border: OutlineInputBorder()),
+              ),
+              if (dialogError != null) ...[
+                const SizedBox(height: 8),
+                Text(dialogError!, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: submitting ? null : () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              key: const Key('withdrawal_confirm_button'),
+              onPressed: submitting
+                  ? null
+                  : () async {
+                      final amount = double.tryParse(amountCtrl.text.trim().replaceAll(',', '.'));
+                      if (amount == null || amount <= 0) {
+                        setDialogState(() => dialogError = 'Ingresa un monto válido.');
+                        return;
+                      }
+                      final amountCents = (amount * 100).round();
+                      if (amountCents > _report.availablePayoutCents) {
+                        setDialogState(() => dialogError = 'El monto supera tu saldo disponible.');
+                        return;
+                      }
+                      setDialogState(() {
+                        submitting = true;
+                        dialogError = null;
+                      });
+                      try {
+                        await PaymentsService.requestWithdrawal(
+                          ownerId: ownerId,
+                          amountCents: amountCents,
+                          payoutDestinationNote: noteCtrl.text.trim().isEmpty ? null : noteCtrl.text.trim(),
+                        );
+                        if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Retiro solicitado con éxito.'), backgroundColor: Colors.green),
+                          );
+                          await _load();
+                        }
+                      } on WithdrawalException catch (e) {
+                        setDialogState(() {
+                          submitting = false;
+                          dialogError = e.message;
+                        });
+                      } catch (_) {
+                        setDialogState(() {
+                          submitting = false;
+                          dialogError = 'No se pudo conectar al servidor.';
+                        });
+                      }
+                    },
+              child: submitting
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Text('Confirmar'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   /// US24: carga los vehículos del propietario y, para cada uno, sus métricas
@@ -88,7 +240,7 @@ class _OwnerEarningsScreenState extends State<OwnerEarningsScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF0F4F8),
       body: RefreshIndicator(
-        onRefresh: () => Future.wait([_load(), _loadVehiclePerformance()]),
+        onRefresh: () => Future.wait([_load(), _loadVehiclePerformance(), _loadMovements()]),
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           child: Column(
@@ -194,11 +346,7 @@ class _OwnerEarningsScreenState extends State<OwnerEarningsScreen> {
           Row(
             children: [
               Expanded(
-                child: _buildActionButton('Retirar', true, () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Procesando retiro a su cuenta bancaria...')),
-                  );
-                }),
+                child: _buildActionButton('Retirar', true, _openWithdrawDialog, key: 'owner_earnings_withdraw_button'),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -211,13 +359,30 @@ class _OwnerEarningsScreenState extends State<OwnerEarningsScreen> {
               ),
             ],
           ),
+          const SizedBox(height: 12),
+          GestureDetector(
+            key: const Key('owner_earnings_withdrawal_history_link'),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const WithdrawalHistoryScreen()),
+            ),
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text('Ver historial de retiros', style: TextStyle(color: kCyan, fontSize: 13, fontWeight: FontWeight.w600)),
+                SizedBox(width: 4),
+                Icon(Icons.chevron_right, color: kCyan, size: 16),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildActionButton(String label, bool isPrimary, VoidCallback onTap) {
+  Widget _buildActionButton(String label, bool isPrimary, VoidCallback onTap, {String? key}) {
     return GestureDetector(
+      key: key != null ? Key(key) : null,
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12),
@@ -263,59 +428,84 @@ class _OwnerEarningsScreenState extends State<OwnerEarningsScreen> {
             ),
           ),
           const SizedBox(height: 4),
-          // F6 diferido (ver plan IP-2026-07-02 §Phase 4/Phase 5 y
-          // docs/planning/03-backlog-ado.md): no existe todavía un endpoint de
-          // desglose mensual en el backend, por lo que la barra de abajo es un
-          // placeholder visual explícito, no datos reales por mes. El total de
-          // arriba SÍ es real (GET /payments/owners/{id}/earnings, US24).
-          Text(
-            'Desglose mensual: próximamente',
-            style: TextStyle(color: Colors.grey[400], fontSize: 11, fontStyle: FontStyle.italic),
+          const Text(
+            'Desglose de movimientos',
+            style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.w600),
           ),
-          const SizedBox(height: 16),
-          Container(
-            height: 150,
-            width: double.infinity,
-            alignment: Alignment.bottomCenter,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                _buildBar(40, 'Nov'),
-                _buildBar(60, 'Dic'),
-                _buildBar(45, 'Ene'),
-                _buildBar(80, 'Feb'),
-                _buildBar(90, 'Mar'),
-                _buildBar(70, 'Abr'),
-                _buildBar(100, 'May', isActive: true),
-              ],
-            ),
-          ),
+          const SizedBox(height: 12),
+          // US47: reemplaza el placeholder "Desglose mensual: próximamente"
+          // con datos reales de GET /payments/owners/{id}/earnings/movements.
+          _buildMovementsSection(),
         ],
       ),
     );
   }
 
-  Widget _buildBar(double heightFactor, String label, {bool isActive = false}) {
+  Widget _buildMovementsSection() {
+    if (_loadingMovements) {
+      return const Padding(
+        key: Key('owner_earnings_movements_loading'),
+        padding: EdgeInsets.symmetric(vertical: 24),
+        child: Center(child: CircularProgressIndicator(color: kCyan)),
+      );
+    }
+    if (_movementsError != null) {
+      return Container(
+        key: const Key('owner_earnings_movements_error'),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(color: Colors.red[50], borderRadius: BorderRadius.circular(12)),
+        child: Row(
+          children: [
+            const Icon(Icons.error_outline, color: Colors.redAccent, size: 18),
+            const SizedBox(width: 8),
+            Expanded(child: Text(_movementsError!, style: const TextStyle(color: Colors.redAccent, fontSize: 12))),
+            TextButton(onPressed: _loadMovements, child: const Text('Reintentar')),
+          ],
+        ),
+      );
+    }
+    if (_movements.isEmpty) {
+      return const Padding(
+        key: Key('owner_earnings_movements_empty'),
+        padding: EdgeInsets.symmetric(vertical: 16),
+        child: Text('Aún no tienes movimientos registrados.', style: TextStyle(color: Colors.grey)),
+      );
+    }
     return Column(
-      mainAxisAlignment: MainAxisAlignment.end,
+      key: const Key('owner_earnings_movements_list'),
       children: [
-        Container(
-          width: 24,
-          height: heightFactor,
-          decoration: BoxDecoration(
-            color: isActive ? kCyan : Colors.grey.shade100,
-            borderRadius: BorderRadius.circular(4),
+        for (int i = 0; i < _movements.length; i++) ...[
+          if (i > 0) const Divider(height: 16),
+          _buildMovementRow(_movements[i]),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildMovementRow(EarningsMovement movement) {
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                movement.reservationId != null ? 'Reserva #${movement.reservationId}' : 'Movimiento',
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Colors.black),
+              ),
+              if (movement.createdAt != null)
+                Text(movement.createdAt!, style: TextStyle(color: Colors.grey.shade500, fontSize: 11)),
+            ],
           ),
         ),
-        const SizedBox(height: 8),
         Text(
-          label,
-          style: TextStyle(
-            fontSize: 10,
-            color: isActive ? Colors.black : Colors.grey,
-            fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-          ),
+          movement.status ?? '',
+          style: TextStyle(color: Colors.grey.shade500, fontSize: 11),
+        ),
+        const SizedBox(width: 12),
+        Text(
+          '\$${movement.amount.toStringAsFixed(2)}',
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black),
         ),
       ],
     );

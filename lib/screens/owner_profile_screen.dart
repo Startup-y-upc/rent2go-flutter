@@ -583,7 +583,11 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
                 _SectionCard(
                   child: Column(
                     children: [
-                      _OptionRow(icon: Icons.notifications_outlined, label: 'Notificaciones'),
+                      _OptionRow(
+                        icon: Icons.notifications_outlined,
+                        label: 'Notificaciones',
+                        onTap: () => context.push('/notifications'),
+                      ),
                       const Divider(height: 1),
                       _OptionRow(
                         icon: Icons.description_outlined,
