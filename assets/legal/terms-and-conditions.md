@@ -1,20 +1,16 @@
 # Términos y Condiciones — Rent2Go
 
-> **Fuente única de contenido legal.** Antes de editar este archivo, lee [`check-parity.md`](./check-parity.md) — cualquier cambio aquí debe replicarse en el mismo commit hacia la versión en inglés ([`terms-and-conditions.en.md`](./terms-and-conditions.en.md)), `rent2go-flutter/assets/legal/terms-and-conditions.md` y `rent2go-kotlin/app/src/main/assets/legal/terms-and-conditions.md`. La versión web se distribuye como PDF (conversión manual) enlazada desde el footer del único landing page: [https://startup-y-upc.github.io/landing-page/](https://startup-y-upc.github.io/landing-page/).
->
-> **Aviso:** este documento es contenido de mejor esfuerzo elaborado para un proyecto estudiantil (Rent2Go) y **no constituye asesoría legal profesional**. No ha sido revisado ni aprobado por un abogado colegiado. Antes de un lanzamiento real, debe ser validado por asesoría legal calificada.
->
-> **Última actualización:** 2026-07-02
+**Última actualización:** 2026-07-02
 
 ---
 
 ## 1. Aceptación de los Términos
 
-Al acceder o utilizar la plataforma Rent2Go (sitio web, aplicación Flutter y aplicación Kotlin/Android, en conjunto la "Plataforma"), usted acepta quedar vinculado por estos Términos y Condiciones ("Términos"). Si no está de acuerdo con alguna parte de estos Términos, no debe utilizar la Plataforma.
+Al acceder o utilizar la plataforma Rent2Go, usted acepta quedar vinculado por estos Términos y Condiciones. Si no está de acuerdo con alguna parte de estos Términos, no debe utilizar la Plataforma.
 
 ## 2. Jurisdicción y Ley Aplicable
 
-Estos Términos se rigen por las leyes de la **República del Perú**. Cualquier controversia derivada del uso de la Plataforma se someterá a los tribunales competentes de la ciudad de Lima, Perú, sin perjuicio de las normas de protección al consumidor aplicables (Ley N.º 29571, Código de Protección y Defensa del Consumidor).
+Estos Términos se rigen por las leyes de **Perú**. Cualquier controversia derivada del uso de la Plataforma se someterá a los tribunales competentes de la ciudad de Lima, Perú, sin perjuicio de las normas de protección al consumidor aplicables (Ley N.º 29571, Código de Protección y Defensa del Consumidor).
 
 ## 3. Cuentas de Usuario
 
