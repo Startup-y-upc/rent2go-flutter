@@ -292,6 +292,27 @@ class AuthService {
     return null;
   }
 
+  /// POST /api/v1/auth/verify/resend — issues a new email verification token
+  /// for the authenticated user and re-sends the verification email
+  /// (best-effort on the backend side). Requires an active session.
+  static Future<void> resendVerificationEmail() async {
+    final token = await getToken();
+    if (token == null) throw AuthException('No hay sesión activa');
+
+    final uri = Uri.parse('$baseUrl/auth/verify/resend');
+    final response = await http.post(
+      uri,
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode != 200) {
+      throw AuthException(
+        _extractMessage(response, 'No se pudo reenviar el correo de verificación'),
+        statusCode: response.statusCode,
+      );
+    }
+  }
+
   static Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_tokenKey);

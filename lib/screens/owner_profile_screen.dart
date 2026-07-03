@@ -23,6 +23,7 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
   bool _editing = false;
   bool _saving = false;
   String? _errorMsg;
+  bool _resendingVerification = false;
 
   final _nameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
@@ -73,6 +74,91 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
     if (img == null) return;
     final bytes = await img.readAsBytes();
     setState(() => _newImageBytes = bytes);
+  }
+
+  /// Wires the previously dead "Foto de perfil / Verificar" stub to the same
+  /// pick+upload flow already used by the avatar tap in edit mode (Phase 0
+  /// parity finding: Kotlin's equivalent row already triggers an upload;
+  /// Flutter's showed a "Verificar" label with no action).
+  Future<void> _pickAndUploadProfilePhoto() async {
+    final img = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+    if (img == null) return;
+    final bytes = await img.readAsBytes();
+    setState(() => _saving = true);
+    try {
+      final updated = await AuthService.updateProfile(
+        fullName: _user?.fullName ?? '',
+        phone: _user?.phone ?? '',
+        profileImageBytes: bytes,
+        imageFilename: 'profile.jpg',
+      );
+      if (mounted) {
+        setState(() {
+          _user = updated;
+          _saving = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Foto de perfil actualizada'), backgroundColor: Colors.green),
+        );
+      }
+    } on AuthException catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message), backgroundColor: Colors.redAccent),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No se pudo conectar al servidor.'), backgroundColor: Colors.redAccent),
+        );
+      }
+    }
+  }
+
+  /// Combined re-verification action for BOTH the email row and the phone row.
+  /// email_verified is a real backend flag with an actionable resend flow
+  /// (POST /auth/verify/resend). phone_verified, per User.java's
+  /// computePhoneVerified(), is a computed rule-based flag (Peru mobile format
+  /// 9XXXXXXXX) with NO OTP/SMS action — it just reflects the phone value
+  /// already on file. So "re-verify both" here means: (a) trigger the real
+  /// email resend, and (b) refresh /auth/me so both badges — email and the
+  /// computed phone flag — reflect the latest true state. There is no second
+  /// backend call for phone; refreshing IS its "reverification". The feedback
+  /// message intentionally avoids implying an SMS/OTP was sent for phone.
+  Future<void> _reverifyEmailAndPhone() async {
+    setState(() => _resendingVerification = true);
+    try {
+      await AuthService.resendVerificationEmail();
+      final fresh = await AuthService.fetchCurrentUser();
+      if (mounted) {
+        setState(() {
+          if (fresh != null) _user = fresh;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Reenviando verificación de correo y actualizando estado...'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } on AuthException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message), backgroundColor: Colors.redAccent),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No se pudo conectar al servidor.'), backgroundColor: Colors.redAccent),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _resendingVerification = false);
+    }
   }
 
   Future<void> _save() async {
@@ -246,8 +332,29 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
                         action: kycVerified ? null : 'Verificar',
                         onAction: () => context.push('/verify-identity'),
                       ),
-                      _VerifyRow(label: 'Email y teléfono', verified: emailVerified && phoneVerified),
-                      const _VerifyRow(label: 'Foto de perfil', verified: false, action: 'Verificar'),
+                      // Two separate rows (matches Kotlin's ProfileScreen.kt VerificationItem
+                      // pattern). Tapping EITHER row re-verifies both at once: resends the
+                      // email verification link AND refreshes /auth/me so both badges reflect
+                      // the current true state. Phone has no independent OTP/SMS action — its
+                      // badge is purely recomputed from the refreshed phone value on file.
+                      _VerifyRow(
+                        label: 'Correo verificado',
+                        verified: emailVerified,
+                        action: _resendingVerification ? 'Enviando...' : 'Reverificar',
+                        onAction: _resendingVerification ? null : _reverifyEmailAndPhone,
+                      ),
+                      _VerifyRow(
+                        label: 'Teléfono verificado',
+                        verified: phoneVerified,
+                        action: _resendingVerification ? 'Enviando...' : 'Reverificar',
+                        onAction: _resendingVerification ? null : _reverifyEmailAndPhone,
+                      ),
+                      _VerifyRow(
+                        label: 'Foto de perfil',
+                        verified: user?.profileImageUrl != null && user!.profileImageUrl!.isNotEmpty,
+                        action: (user?.profileImageUrl != null && user!.profileImageUrl!.isNotEmpty) ? null : 'Verificar',
+                        onAction: _pickAndUploadProfilePhoto,
+                      ),
                     ],
                   ),
                 ),
@@ -475,13 +582,16 @@ class _VerifyRow extends StatelessWidget {
         const SizedBox(width: 12),
         Text(label, style: const TextStyle(fontSize: 14, color: Colors.black)),
         const Spacer(),
-        if (action != null && !verified)
+        Text(verified ? 'Verificado' : 'Pendiente', style: TextStyle(color: verified ? Colors.green : Colors.orange[700], fontSize: 12, fontWeight: FontWeight.w500)),
+        // Action stays tappable even when already verified (e.g. "Reverificar")
+        // so re-verification/refresh flows aren't limited to the unverified state.
+        if (action != null) ...[
+          const SizedBox(width: 8),
           GestureDetector(
             onTap: onAction,
             child: Text(action!, style: TextStyle(color: Colors.blue[600], fontSize: 13, fontWeight: FontWeight.w500)),
-          )
-        else
-          Text(verified ? 'Verificado' : 'Pendiente', style: TextStyle(color: verified ? Colors.green : Colors.orange[700], fontSize: 12, fontWeight: FontWeight.w500)),
+          ),
+        ],
       ],
     ),
   );
