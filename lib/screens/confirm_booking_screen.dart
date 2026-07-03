@@ -2,30 +2,185 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/vehicle_models.dart';
+import '../services/auth_service.dart';
+import '../services/payments_service.dart';
+import '../services/reservation_service.dart';
 import '../widgets/common_widgets.dart';
 
 class ConfirmBookingScreen extends StatefulWidget {
   final VehicleData vehicle;
-  const ConfirmBookingScreen({super.key, required this.vehicle});
+  final DateTime? startDate;
+  final DateTime? endDate;
+  const ConfirmBookingScreen({super.key, required this.vehicle, this.startDate, this.endDate});
   @override
   State<ConfirmBookingScreen> createState() => _ConfirmBookingScreenState();
 }
 
+enum _LoadState { loading, ready, error }
+enum _SubmitState { idle, processingPayment, creatingReservation, success, paymentFailed, reservationFailed }
+
 class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
-  int _coverage = 1;
+  late final DateTime _startDate;
+  late final DateTime _endDate;
 
-  final _coverages = [
-    _Coverage(name: 'Esencial', desc: 'Franquicia 1.500 €', price: 0),
-    _Coverage(name: 'Plus', desc: 'Sin franquicia · Recomendada', price: 8, popular: true),
-    _Coverage(name: 'Premium', desc: 'Sin franquicia + asistencia ilimitada', price: 14),
-  ];
+  _LoadState _loadState = _LoadState.loading;
+  List<CoveragePlan> _coverages = [];
+  int _coverageIndex = 0;
+  FareBreakdown? _fare;
+  bool _calculating = false;
+  String? _loadError;
 
-  double get _total {
-    final base = widget.vehicle.dailyPrice * 2;
-    final coverageExtra = _coverages[_coverage].price * 2;
-    const serviceFee = 9.40;
-    return base + coverageExtra + serviceFee;
+  _SubmitState _submitState = _SubmitState.idle;
+  String? _submitError;
+
+  int get _days => _endDate.difference(_startDate).inDays.clamp(1, 365);
+
+  @override
+  void initState() {
+    super.initState();
+    _startDate = widget.startDate ?? DateTime.now().add(const Duration(days: 2));
+    _endDate = widget.endDate ?? _startDate.add(const Duration(days: 2));
+    _loadCoveragePlans();
   }
+
+  Future<void> _loadCoveragePlans() async {
+    setState(() => _loadState = _LoadState.loading);
+    try {
+      final plans = await PaymentsService.getCoveragePlans();
+      if (!mounted) return;
+      setState(() {
+        _coverages = plans;
+        _loadState = _LoadState.ready;
+      });
+      await _recalculateFare();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loadState = _LoadState.error;
+        _loadError = 'No se pudieron cargar los planes de cobertura.';
+      });
+    }
+  }
+
+  Future<void> _recalculateFare() async {
+    if (_coverages.isEmpty) return;
+    setState(() => _calculating = true);
+    try {
+      final base = widget.vehicle.dailyPrice * _days;
+      final fare = await PaymentsService.calculateFare(
+        baseAmount: base,
+        coveragePlan: _coverages[_coverageIndex].code,
+      );
+      if (!mounted) return;
+      setState(() {
+        _fare = fare;
+        _calculating = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _calculating = false;
+        _loadError = 'No se pudo calcular el precio total.';
+      });
+    }
+  }
+
+  String _fmt(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  Future<void> _payAndReserve() async {
+    final fare = _fare;
+    if (fare == null) return;
+
+    setState(() {
+      _submitState = _SubmitState.processingPayment;
+      _submitError = null;
+    });
+
+    final user = await AuthService.getCurrentUser();
+    if (user == null) {
+      setState(() {
+        _submitState = _SubmitState.paymentFailed;
+        _submitError = 'No hay sesión activa. Inicia sesión nuevamente.';
+      });
+      return;
+    }
+
+    // Paso 1: crear la reserva real primero — el backend exige un reservationId
+    // válido y positivo en /payments/create-intent (CreateIntentRequest.reservationId
+    // es @NotNull @Positive y el intent se persiste contra esa reserva), por lo que
+    // el orden correcto es reserva -> intent, no al revés.
+    setState(() => _submitState = _SubmitState.creatingReservation);
+    late final ReservationData reservation;
+    try {
+      reservation = await ReservationService.createReservation(
+        vehicleId: widget.vehicle.id,
+        renterId: user.userId,
+        startDate: _fmt(_startDate),
+        endDate: _fmt(_endDate),
+        totalAmount: fare.total,
+        pickupLocation: widget.vehicle.location,
+        returnLocation: widget.vehicle.location,
+        coveragePlan: _coverages[_coverageIndex].code,
+      );
+    } on ReservationException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _submitState = _SubmitState.reservationFailed;
+        _submitError = e.message;
+      });
+      return;
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _submitState = _SubmitState.reservationFailed;
+        _submitError = 'No se pudo crear la reserva. No se realizó ningún cargo.';
+      });
+      return;
+    }
+
+    // Paso 2: crear el PaymentIntent real en el backend contra la reserva ya creada.
+    // NOTA: no existe un SDK de Stripe integrado en la app Flutter todavía
+    // (no está en pubspec.yaml) — la confirmación de tarjeta con Stripe queda
+    // fuera de alcance de este plan (ver plan §"Out of scope"); este flujo
+    // valida que el intent de cobro se cree correctamente en el backend real.
+    setState(() => _submitState = _SubmitState.processingPayment);
+    try {
+      final intent = await PaymentsService.createPaymentIntent(
+        reservationId: reservation.id,
+        amountCents: (fare.total * 100).round(),
+      );
+      if (intent.clientSecret.isEmpty) {
+        throw PaymentException('El pago no pudo iniciarse.');
+      }
+      if (!mounted) return;
+      setState(() => _submitState = _SubmitState.success);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Reserva ${reservation.reservationCode} creada — pago en proceso'), backgroundColor: Colors.green),
+      );
+      context.go('/bookings');
+    } on PaymentException catch (e) {
+      // Riesgo explícito del plan: la reserva se creó pero el cobro falló —
+      // se muestra un estado de error visible con el código de la reserva ya
+      // creada, en vez de un SnackBar silencioso seguido de navegación a home.
+      if (!mounted) return;
+      setState(() {
+        _submitState = _SubmitState.paymentFailed;
+        _submitError = 'La reserva ${reservation.reservationCode} se creó, pero el cobro falló: ${e.message} '
+            'Revisa "Mis reservas" para reintentar el pago.';
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _submitState = _SubmitState.paymentFailed;
+        _submitError = 'La reserva ${reservation.reservationCode} se creó, pero no se pudo procesar el cobro. '
+            'Revisa "Mis reservas" para reintentar el pago.';
+      });
+    }
+  }
+
+  bool get _isSubmitting =>
+      _submitState == _SubmitState.processingPayment || _submitState == _SubmitState.creatingReservation;
 
   @override
   Widget build(BuildContext context) {
@@ -38,113 +193,147 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
         leading: GestureDetector(onTap: () => context.pop(), child: const Icon(Icons.arrow_back, color: Colors.black)),
         title: const Text('Confirmar reserva', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 17)),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+      body: _buildBody(vehicle),
+    );
+  }
+
+  Widget _buildBody(VehicleData vehicle) {
+    if (_loadState == _LoadState.loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_loadState == _LoadState.error) {
+      return Center(
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: Colors.grey[50], borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade200)),
-              child: Row(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: vehicle.primaryImageUrl != null && vehicle.primaryImageUrl!.isNotEmpty
-                        ? CachedNetworkImage(imageUrl: vehicle.primaryImageUrl!, width: 72, height: 56, fit: BoxFit.cover,
-                            placeholder: (_, __) => Container(width: 72, height: 56, color: Colors.grey[200]),
-                            errorWidget: (_, __, ___) => Container(width: 72, height: 56, color: const Color(0xFF1A1A2E), child: const Icon(Icons.directions_car, color: Colors.white54)))
-                        : Container(width: 72, height: 56, color: const Color(0xFF1A1A2E), child: const Icon(Icons.directions_car, color: Colors.white54)),
-                  ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(vehicle.name, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black)),
-                      Text(vehicle.categoryName, style: TextStyle(color: Colors.grey[500], fontSize: 12)),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            _DetailRow(icon: Icons.calendar_today_outlined, label: 'Recogida', value: 'Mar 12 May · 10:00'),
-            _DetailRow(icon: Icons.access_time_outlined, label: 'Devolución', value: 'Jue 14 May · 18:00'),
-            _DetailRow(icon: Icons.location_on_outlined, label: 'Punto de encuentro', value: vehicle.location),
-            const SizedBox(height: 20),
-            const Text('Cobertura', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black)),
+            const Icon(Icons.error_outline, color: Colors.redAccent, size: 40),
             const SizedBox(height: 12),
-            ..._coverages.asMap().entries.map((e) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: GestureDetector(
-                onTap: () => setState(() => _coverage = e.key),
-                child: Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: _coverage == e.key ? kCyan : Colors.grey.shade200, width: _coverage == e.key ? 2 : 1)),
-                  child: Row(
-                    children: [
-                      Radio<int>(value: e.key, groupValue: _coverage, onChanged: (v) => setState(() => _coverage = v!), activeColor: kCyan),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(children: [
-                              Text(e.value.name, style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.black)),
-                              if (e.value.popular) ...[
-                                const SizedBox(width: 8),
-                                Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), decoration: BoxDecoration(color: kCyan.withOpacity(0.15), borderRadius: BorderRadius.circular(20)),
-                                    child: const Text('Popular', style: TextStyle(color: kCyan, fontSize: 11, fontWeight: FontWeight.bold))),
-                              ],
-                            ]),
-                            Text(e.value.desc, style: TextStyle(color: Colors.grey[500], fontSize: 12)),
-                          ],
-                        ),
-                      ),
-                      Text(e.value.price == 0 ? '0 €' : '${e.value.price} €/día', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black)),
-                    ],
-                  ),
-                ),
-              ),
-            )),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(color: Colors.grey[50], borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade200)),
-              child: Column(
-                children: [
-                  _PriceRow(label: '${vehicle.dailyPrice.toInt()}€ × 2 días', value: '${(vehicle.dailyPrice * 2).toStringAsFixed(2)} €'),
-                  _PriceRow(label: 'Cobertura ${_coverages[_coverage].name}', value: _coverages[_coverage].price == 0 ? '0 €' : '${(_coverages[_coverage].price * 2).toStringAsFixed(2)} €'),
-                  const _PriceRow(label: 'Tasa de servicio', value: '9,40 €'),
-                  const Divider(height: 20),
-                  _PriceRow(label: 'Total', value: '${_total.toStringAsFixed(2)} €', bold: true),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity, height: 52,
-              child: ElevatedButton(
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('¡Reserva confirmada! 🎉'), backgroundColor: Colors.green));
-                  context.go('/home');
-                },
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.black, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                child: const Text('Pagar y reservar', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              ),
-            ),
-            const SizedBox(height: 24),
+            Text(_loadError ?? 'Error al cargar', style: const TextStyle(color: Colors.black87)),
+            const SizedBox(height: 12),
+            ElevatedButton(onPressed: _loadCoveragePlans, child: const Text('Reintentar')),
           ],
         ),
+      );
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: Colors.grey[50], borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade200)),
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: vehicle.primaryImageUrl != null && vehicle.primaryImageUrl!.isNotEmpty
+                      ? CachedNetworkImage(imageUrl: vehicle.primaryImageUrl!, width: 72, height: 56, fit: BoxFit.cover,
+                          placeholder: (_, __) => Container(width: 72, height: 56, color: Colors.grey[200]),
+                          errorWidget: (_, __, ___) => Container(width: 72, height: 56, color: const Color(0xFF1A1A2E), child: const Icon(Icons.directions_car, color: Colors.white54)))
+                      : Container(width: 72, height: 56, color: const Color(0xFF1A1A2E), child: const Icon(Icons.directions_car, color: Colors.white54)),
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(vehicle.name, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black)),
+                    Text(vehicle.categoryName, style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          _DetailRow(icon: Icons.calendar_today_outlined, label: 'Recogida', value: _fmt(_startDate)),
+          _DetailRow(icon: Icons.access_time_outlined, label: 'Devolución', value: _fmt(_endDate)),
+          _DetailRow(icon: Icons.location_on_outlined, label: 'Punto de encuentro', value: vehicle.location),
+          const SizedBox(height: 20),
+          const Text('Cobertura', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black)),
+          const SizedBox(height: 12),
+          ..._coverages.asMap().entries.map((e) => Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: GestureDetector(
+              onTap: _isSubmitting ? null : () {
+                setState(() => _coverageIndex = e.key);
+                _recalculateFare();
+              },
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: _coverageIndex == e.key ? kCyan : Colors.grey.shade200, width: _coverageIndex == e.key ? 2 : 1)),
+                child: Row(
+                  children: [
+                    Radio<int>(value: e.key, groupValue: _coverageIndex, onChanged: _isSubmitting ? null : (v) {
+                      setState(() => _coverageIndex = v!);
+                      _recalculateFare();
+                    }, activeColor: kCyan),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(e.value.name, style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.black)),
+                          Text(e.value.description, style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                        ],
+                      ),
+                    ),
+                    Text(e.value.dailyRateUsd == 0 ? r'$0' : '\$${e.value.dailyRateUsd.toStringAsFixed(2)}/día', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black)),
+                  ],
+                ),
+              ),
+            ),
+          )),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(color: Colors.grey[50], borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade200)),
+            child: _calculating || _fare == null
+                ? const Padding(padding: EdgeInsets.all(8), child: Center(child: CircularProgressIndicator()))
+                : Column(
+                    children: [
+                      _PriceRow(label: '${vehicle.dailyPrice.toStringAsFixed(0)} × $_days días', value: '\$${_fare!.subtotal.toStringAsFixed(2)}'),
+                      _PriceRow(label: 'Cobertura ${_coverages[_coverageIndex].name}', value: '\$${_fare!.coverageFee.toStringAsFixed(2)}'),
+                      _PriceRow(label: 'Tasa de servicio', value: '\$${_fare!.serviceFee.toStringAsFixed(2)}'),
+                      if (_fare!.discount > 0) _PriceRow(label: 'Descuento', value: '-\$${_fare!.discount.toStringAsFixed(2)}'),
+                      if (_fare!.taxes > 0) _PriceRow(label: 'Impuestos', value: '\$${_fare!.taxes.toStringAsFixed(2)}'),
+                      const Divider(height: 20),
+                      _PriceRow(label: 'Total', value: '\$${_fare!.total.toStringAsFixed(2)}', bold: true),
+                    ],
+                  ),
+          ),
+          if (_submitError != null) ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: Colors.red[50], borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.red.shade200)),
+              child: Row(
+                children: [
+                  const Icon(Icons.error_outline, color: Colors.redAccent, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(_submitError!, style: const TextStyle(color: Colors.redAccent, fontSize: 13))),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity, height: 52,
+            child: ElevatedButton(
+              onPressed: (_isSubmitting || _fare == null) ? null : _payAndReserve,
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.black, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+              child: _isSubmitting
+                  ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white))
+                  : Text(
+                      _submitState == _SubmitState.reservationFailed ? 'Reintentar reserva' : 'Pagar y reservar',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+            ),
+          ),
+          const SizedBox(height: 24),
+        ],
       ),
     );
   }
-}
-
-class _Coverage {
-  final String name, desc;
-  final double price;
-  final bool popular;
-  const _Coverage({required this.name, required this.desc, required this.price, this.popular = false});
 }
 
 class _DetailRow extends StatelessWidget {

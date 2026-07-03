@@ -9,7 +9,12 @@ import '../widgets/common_widgets.dart';
 import '../services/auth_service.dart';
 
 class ValidateAccountScreen extends StatefulWidget {
-  const ValidateAccountScreen({super.key});
+  /// Cuando es true, la pantalla se abre desde un perfil ya autenticado
+  /// (re-verificación, F8) en vez de desde el flujo de registro: se omite
+  /// AuthService.register() y se envían los documentos directamente para el
+  /// usuario de la sesión activa.
+  final bool reVerifyMode;
+  const ValidateAccountScreen({super.key, this.reVerifyMode = false});
   @override
   State<ValidateAccountScreen> createState() => _ValidateAccountScreenState();
 }
@@ -82,6 +87,11 @@ class _ValidateAccountScreenState extends State<ValidateAccountScreen> {
       _errorMsg = null;
     });
 
+    if (widget.reVerifyMode) {
+      await _submitReVerify();
+      return;
+    }
+
     try {
       final draft = Hive.box('register_draft');
       final name = draft.get('name',  defaultValue: '');
@@ -152,8 +162,52 @@ class _ValidateAccountScreenState extends State<ValidateAccountScreen> {
     }
   }
 
+  /// F8: re-envío de documentos KYC para un usuario ya autenticado (no pasa
+  /// por register()). Usa el mismo endpoint POST /auth/kyc/multipart.
+  Future<void> _submitReVerify() async {
+    try {
+      final user = await AuthService.getCurrentUser();
+      if (user == null) {
+        setState(() {
+          _loading = false;
+          _errorMsg = 'No hay sesión activa.';
+        });
+        return;
+      }
+      final idNumber = _idNumberCtrl.text.trim();
+      await AuthService.submitKycMultipart(
+        userId: user.userId,
+        fullName: user.fullName,
+        idNumber: idNumber,
+        dniFrontBytes: _dniAnvBytes!,
+        dniBackBytes: _dniRevBytes!,
+        driverLicenseBytes: _licenciaBytes,
+      );
+      if (!mounted) return;
+      setState(() => _loading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Documentos enviados para revisión'), backgroundColor: Colors.green),
+      );
+      context.pop();
+    } on AuthException catch (e) {
+      setState(() {
+        _loading = false;
+        _errorMsg = e.message;
+      });
+    } catch (e) {
+      setState(() {
+        _loading = false;
+        _errorMsg = 'No se pudieron enviar los documentos. Intenta nuevamente.';
+      });
+    }
+  }
+
   void _cancel() {
-    context.go('/register');
+    if (widget.reVerifyMode) {
+      context.pop();
+    } else {
+      context.go('/register');
+    }
   }
 
   @override
@@ -179,14 +233,15 @@ class _ValidateAccountScreenState extends State<ValidateAccountScreen> {
                 ],
               ),
               const SizedBox(height: 24),
-              StepIndicator(
-                current: 3,
-                total: 3,
-                labels: const ['Datos', 'Tipo cuenta', 'Validación'],
-              ),
+              if (!widget.reVerifyMode)
+                StepIndicator(
+                  current: 3,
+                  total: 3,
+                  labels: const ['Datos', 'Tipo cuenta', 'Validación'],
+                ),
               const SizedBox(height: 32),
-              const Text('Valida tu cuenta',
-                  style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white)),
+              Text(widget.reVerifyMode ? 'Verifica tu identidad' : 'Valida tu cuenta',
+                  style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white)),
               const SizedBox(height: 8),
               const Text('Sube una foto clara de tu DNI y de tu licencia de conducir.',
                   style: TextStyle(color: Colors.white54, fontSize: 13)),
@@ -276,8 +331,8 @@ class _ValidateAccountScreenState extends State<ValidateAccountScreen> {
                 width: double.infinity,
                 child: TextButton(
                   onPressed: _cancel,
-                  child: const Text('Cancelar y volver al registro',
-                      style: TextStyle(color: Colors.white38, fontSize: 13)),
+                  child: Text(widget.reVerifyMode ? 'Cancelar' : 'Cancelar y volver al registro',
+                      style: const TextStyle(color: Colors.white38, fontSize: 13)),
                 ),
               ),
               const SizedBox(height: 16),

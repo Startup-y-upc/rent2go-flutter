@@ -10,6 +10,7 @@ class UserModel {
   final bool emailVerified;
   final bool phoneVerified;
   final bool twoFactorEnabled;
+  final bool kycVerified;
   final String? profileImageUrl;
 
   UserModel({
@@ -24,6 +25,7 @@ class UserModel {
     required this.emailVerified,
     required this.phoneVerified,
     required this.twoFactorEnabled,
+    this.kycVerified = false,
     this.profileImageUrl,
   });
 
@@ -40,6 +42,9 @@ class UserModel {
       emailVerified: json['emailVerified'] ?? json['email_verified'] ?? false,
       phoneVerified: json['phoneVerified'] ?? json['phone_verified'] ?? false,
       twoFactorEnabled: json['twoFactorEnabled'] ?? json['two_factor_enabled'] ?? false,
+      // Campo real del backend: siempre serializado como 'kyc_verified' (snake_case,
+      // forzado con @JsonProperty en UserResource.java, confirmado por lectura directa).
+      kycVerified: json['kyc_verified'] ?? json['kycVerified'] ?? false,
       profileImageUrl: json['profileImageUrl'] ?? json['profile_image_url'],
     );
   }
@@ -57,6 +62,7 @@ class UserModel {
       'emailVerified': emailVerified,
       'phoneVerified': phoneVerified,
       'twoFactorEnabled': twoFactorEnabled,
+      'kyc_verified': kycVerified,
       'profileImageUrl': profileImageUrl,
     };
   }

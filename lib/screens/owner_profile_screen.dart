@@ -7,6 +7,7 @@ import '../models/vehicle_models.dart';
 import '../services/auth_service.dart';
 import '../services/vehicle_service.dart';
 import '../widgets/common_widgets.dart';
+import 'validate_account_screen.dart';
 
 class OwnerProfileScreen extends StatefulWidget {
   final VoidCallback onNavigateToEarnings;
@@ -144,9 +145,10 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
     final email = user?.email ?? '';
     final emailVerified = user?.emailVerified ?? false;
     final phoneVerified = user?.phoneVerified ?? false;
-    // DNI y Carnet de conducir se muestran como verificados de forma estática
-    // (no dependen de ningún dato real del backend, son solo visuales por ahora).
-    final verifiedCount = (emailVerified ? 1 : 0) + (phoneVerified ? 1 : 0) + 2;
+    // F4: KYC (DNI/Carnet) refleja el campo real kyc_verified del backend,
+    // ya no un valor hardcodeado en true.
+    final kycVerified = user?.kycVerified ?? false;
+    final verifiedCount = (emailVerified ? 1 : 0) + (phoneVerified ? 1 : 0) + (kycVerified ? 2 : 0);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF0F4F8),
@@ -238,8 +240,12 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
                       const SizedBox(height: 4),
                       LinearProgressIndicator(value: verifiedCount / 4, backgroundColor: Colors.grey.shade100, color: kCyan, minHeight: 4, borderRadius: BorderRadius.circular(2)),
                       const SizedBox(height: 14),
-                      const _VerifyRow(label: 'Identidad (DNI)', verified: true),
-                      const _VerifyRow(label: 'Carnet de conducir', verified: true),
+                      _VerifyRow(
+                        label: 'Identidad (DNI y licencia)',
+                        verified: kycVerified,
+                        action: kycVerified ? null : 'Verificar',
+                        onAction: () => context.push('/verify-identity'),
+                      ),
                       _VerifyRow(label: 'Email y teléfono', verified: emailVerified && phoneVerified),
                       const _VerifyRow(label: 'Foto de perfil', verified: false, action: 'Verificar'),
                     ],
@@ -406,11 +412,7 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
               ]
             : myCars.map((car) => Column(
                 children: [
-                  _buildBusinessItem(
-                    car.name,
-                    car.status,
-                    car.primaryImageUrl ?? 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?w=200&q=80',
-                  ),
+                  _buildBusinessItem(car.name, car.status, car.primaryImageUrl),
                   if (car != myCars.last) const Divider(height: 1),
                 ],
               )).toList(),
@@ -418,11 +420,25 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
     );
   }
 
-  Widget _buildBusinessItem(String title, String subtitle, String imageUrl) {
+  // F5: mismo patrón de fallback local usado en owner_vehicles_screen.dart —
+  // ya no se usa una URL externa de unsplash cuando el vehículo no tiene foto.
+  Widget _buildBusinessItem(String title, String subtitle, String? imageUrl) {
     return ListTile(
       leading: ClipRRect(
         borderRadius: BorderRadius.circular(8),
-        child: Image.network(imageUrl, width: 48, height: 36, fit: BoxFit.cover),
+        child: (imageUrl != null && imageUrl.isNotEmpty)
+            ? Image.network(
+                imageUrl,
+                width: 48, height: 36, fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(
+                  width: 48, height: 36, color: Colors.grey[200],
+                  child: const Icon(Icons.directions_car, color: Colors.grey, size: 18),
+                ),
+              )
+            : Container(
+                width: 48, height: 36, color: Colors.grey[200],
+                child: const Icon(Icons.directions_car, color: Colors.grey, size: 18),
+              ),
       ),
       title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black)),
       subtitle: Text(subtitle, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
@@ -448,7 +464,8 @@ class _VerifyRow extends StatelessWidget {
   final String label;
   final bool verified;
   final String? action;
-  const _VerifyRow({required this.label, required this.verified, this.action});
+  final VoidCallback? onAction;
+  const _VerifyRow({required this.label, required this.verified, this.action, this.onAction});
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 6),
@@ -459,7 +476,10 @@ class _VerifyRow extends StatelessWidget {
         Text(label, style: const TextStyle(fontSize: 14, color: Colors.black)),
         const Spacer(),
         if (action != null && !verified)
-          Text(action!, style: TextStyle(color: Colors.blue[600], fontSize: 13, fontWeight: FontWeight.w500))
+          GestureDetector(
+            onTap: onAction,
+            child: Text(action!, style: TextStyle(color: Colors.blue[600], fontSize: 13, fontWeight: FontWeight.w500)),
+          )
         else
           Text(verified ? 'Verificado' : 'Pendiente', style: TextStyle(color: verified ? Colors.green : Colors.orange[700], fontSize: 12, fontWeight: FontWeight.w500)),
       ],

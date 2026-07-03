@@ -12,6 +12,8 @@ import 'screens/explore_screen.dart';
 import 'screens/car_detail_screen.dart';
 import 'screens/confirm_booking_screen.dart';
 import 'screens/bookings_screen.dart';
+import 'screens/reservation_detail_screen.dart';
+import 'services/reservation_service.dart';
 import 'screens/messages_screen.dart';
 import 'screens/chat_screen.dart';
 import 'screens/profile_screen.dart';
@@ -51,6 +53,9 @@ class Rent2GoApp extends StatelessWidget {
 
 const _renterPaths = ['/home', '/bookings', '/messages', '/profile', '/car-detail', '/confirm-booking'];
 const _ownerPaths = ['/owner'];
+// Rutas compartidas por ambos roles (no se redirigen): '/reservation-detail',
+// '/chat', '/verify-identity' — se abren tanto desde pantallas de renter como
+// de owner (bookings_screen.dart y owner_dashboard_screen.dart respectivamente).
 
 final _router = GoRouter(
   redirect: (context, state) async {
@@ -93,6 +98,14 @@ final _router = GoRouter(
     GoRoute(
       path: '/confirm-booking',
       builder: (context, state) => ConfirmBookingScreen(vehicle: state.extra as VehicleData),
+    ),
+    GoRoute(
+      path: '/reservation-detail',
+      builder: (context, state) => ReservationDetailScreen(reservation: state.extra as ReservationData),
+    ),
+    GoRoute(
+      path: '/verify-identity',
+      builder: (context, state) => const ValidateAccountScreen(reVerifyMode: true),
     ),
     GoRoute(
       path: '/chat',

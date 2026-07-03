@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../widgets/common_widgets.dart';
+import '../services/auth_service.dart';
+import '../services/reservation_service.dart';
 import 'explore_screen.dart' show BottomNavBar;
 
 class BookingsScreen extends StatefulWidget {
@@ -10,50 +12,55 @@ class BookingsScreen extends StatefulWidget {
   State<BookingsScreen> createState() => _BookingsScreenState();
 }
 
+enum _LoadState { loading, ready, error, empty }
+
 class _BookingsScreenState extends State<BookingsScreen> {
   int _filter = 0; // 0=Próximas 1=Activas 2=Pasadas
+  _LoadState _state = _LoadState.loading;
+  List<ReservationData> _reservations = [];
+  String? _error;
 
-  final _upcoming = [
-    _Booking(
-      carName: 'Tesla Model 3',
-      carSub: 'Long Range · 2024',
-      imageUrl: 'https://images.unsplash.com/photo-1560958089-b8a1929cea89?w=400&q=80',
-      pickupDate: '12 May · 10:00',
-      returnDate: '14 May · 18:00',
-      owner: 'Lucía M.',
-      address: 'Calle Goya 24',
-      status: 'Próxima',
-      total: 123.40,
-      isActive: true,
-    ),
-  ];
+  static const _upcomingStatuses = {'PENDING', 'CONFIRMED', 'ACTIVE'};
+  static const _pastStatuses = {'COMPLETED', 'CANCELLED'};
 
-  final _past = [
-    _Booking(
-      carName: 'Mini Cooper S',
-      carSub: '',
-      imageUrl: 'https://images.unsplash.com/photo-1510903117032-f1596c327647?w=400&q=80',
-      pickupDate: '28 abr',
-      returnDate: '30 abr',
-      owner: 'Andrés R.',
-      address: '',
-      status: 'Completada',
-      total: 76,
-      isActive: false,
-    ),
-    _Booking(
-      carName: 'Volkswagen Golf',
-      carSub: '',
-      imageUrl: 'https://images.unsplash.com/photo-1541899481282-d53bffe3c35d?w=400&q=80',
-      pickupDate: '12 abr',
-      returnDate: '13 abr',
-      owner: 'María S.',
-      address: '',
-      status: 'Completada',
-      total: 32,
-      isActive: false,
-    ),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _state = _LoadState.loading);
+    final user = await AuthService.getCurrentUser();
+    if (user == null) {
+      setState(() {
+        _state = _LoadState.error;
+        _error = 'No hay sesión activa.';
+      });
+      return;
+    }
+    try {
+      // Vista de renter: siempre GET /reservations?renterId=... — esta pantalla
+      // es role-fixed a renter, no hay ambigüedad sobre qué endpoint llamar.
+      final paged = await ReservationService.getMyReservationsAsRenter(renterId: user.userId, size: 50);
+      if (!mounted) return;
+      setState(() {
+        _reservations = paged.content;
+        _state = _reservations.isEmpty ? _LoadState.empty : _LoadState.ready;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _state = _LoadState.error;
+        _error = 'No se pudieron cargar tus reservas.';
+      });
+    }
+  }
+
+  List<ReservationData> get _upcoming =>
+      _reservations.where((r) => _upcomingStatuses.contains(r.status.toUpperCase())).toList();
+  List<ReservationData> get _past =>
+      _reservations.where((r) => _pastStatuses.contains(r.status.toUpperCase())).toList();
 
   void _goToBottomNav(int i) {
     switch (i) {
@@ -62,6 +69,10 @@ class _BookingsScreenState extends State<BookingsScreen> {
       case 2: context.go('/messages'); break;
       case 3: context.go('/profile'); break;
     }
+  }
+
+  void _openReservation(ReservationData r) {
+    context.push('/reservation-detail', extra: r);
   }
 
   @override
@@ -127,33 +138,82 @@ class _BookingsScreenState extends State<BookingsScreen> {
               ),
             ),
             const SizedBox(height: 20),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                children: [
-                  if (_filter == 0 || _filter == 1) ...[
-                    _ActiveBookingCard(booking: _upcoming[0]),
-                    const SizedBox(height: 24),
-                  ],
-                  if (_filter == 0 || _filter == 2) ...[
-                    const Text('Anteriores', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black)),
-                    const SizedBox(height: 12),
-                    ..._past.map((b) => _PastBookingCard(booking: b)),
-                  ],
-                ],
-              ),
-            ),
+            Expanded(child: _buildContent()),
           ],
         ),
       ),
       bottomNavigationBar: BottomNavBar(current: 1, onTap: _goToBottomNav),
     );
   }
+
+  Widget _buildContent() {
+    if (_state == _LoadState.loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_state == _LoadState.error) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline, color: Colors.redAccent, size: 36),
+            const SizedBox(height: 8),
+            Text(_error ?? 'Error', style: const TextStyle(color: Colors.black87)),
+            const SizedBox(height: 12),
+            ElevatedButton(onPressed: _load, child: const Text('Reintentar')),
+          ],
+        ),
+      );
+    }
+    if (_state == _LoadState.empty) {
+      return RefreshIndicator(
+        onRefresh: _load,
+        child: ListView(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 60),
+          children: const [
+            Center(
+              child: Column(
+                children: [
+                  Icon(Icons.event_busy_outlined, size: 48, color: Colors.grey),
+                  SizedBox(height: 12),
+                  Text('Todavía no tienes reservas', style: TextStyle(color: Colors.grey, fontSize: 14)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final upcoming = _upcoming;
+    final past = _past;
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        children: [
+          if ((_filter == 0 || _filter == 1) && upcoming.isNotEmpty) ...[
+            ...upcoming.map((r) => Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: _ActiveBookingCard(reservation: r, onOpen: () => _openReservation(r)),
+                )),
+          ],
+          if (_filter == 0 || _filter == 2) ...[
+            if (past.isNotEmpty) ...[
+              const Text('Anteriores', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black)),
+              const SizedBox(height: 12),
+              ...past.map((r) => _PastBookingCard(reservation: r, onOpen: () => _openReservation(r))),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
 }
 
 class _ActiveBookingCard extends StatelessWidget {
-  final _Booking booking;
-  const _ActiveBookingCard({required this.booking});
+  final ReservationData reservation;
+  final VoidCallback onOpen;
+  const _ActiveBookingCard({required this.reservation, required this.onOpen});
 
   @override
   Widget build(BuildContext context) {
@@ -172,36 +232,38 @@ class _ActiveBookingCard extends StatelessWidget {
                   child: Row(children: [
                     Container(width: 6, height: 6, decoration: const BoxDecoration(color: kCyan, shape: BoxShape.circle)),
                     const SizedBox(width: 6),
-                    const Text('Próxima', style: TextStyle(color: kCyan, fontSize: 12, fontWeight: FontWeight.bold)),
+                    Text(reservation.status, style: const TextStyle(color: kCyan, fontSize: 12, fontWeight: FontWeight.bold)),
                   ]),
                 ),
                 const Spacer(),
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
-                  child: CachedNetworkImage(
-                    imageUrl: booking.imageUrl, width: 80, height: 55, fit: BoxFit.cover,
-                    errorWidget: (_, __, ___) => Container(width: 80, height: 55, color: Colors.grey[800], child: const Icon(Icons.directions_car, color: Colors.white38)),
-                  ),
+                  child: reservation.pickupPhotos.isNotEmpty
+                      ? CachedNetworkImage(
+                          imageUrl: reservation.pickupPhotos.first, width: 80, height: 55, fit: BoxFit.cover,
+                          errorWidget: (_, __, ___) => Container(width: 80, height: 55, color: Colors.grey[800], child: const Icon(Icons.directions_car, color: Colors.white38)),
+                        )
+                      : Container(width: 80, height: 55, color: Colors.grey[800], child: const Icon(Icons.directions_car, color: Colors.white38)),
                 ),
               ],
             ),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(booking.carName, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+            child: Text('Reserva ${reservation.reservationCode}', style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text(booking.carSub, style: const TextStyle(color: Colors.white54, fontSize: 13)),
+            child: Text('Cobertura: ${reservation.coveragePlan}', style: const TextStyle(color: Colors.white54, fontSize: 13)),
           ),
           const SizedBox(height: 16),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               children: [
-                _DateChip(label: 'Recoge', date: booking.pickupDate),
+                _DateChip(label: 'Recoge', date: reservation.startDate),
                 Expanded(child: Container(height: 1, margin: const EdgeInsets.symmetric(horizontal: 8), color: Colors.white24)),
-                _DateChip(label: 'Devuelve', date: booking.returnDate),
+                _DateChip(label: 'Devuelve', date: reservation.endDate),
               ],
             ),
           ),
@@ -215,13 +277,13 @@ class _ActiveBookingCard extends StatelessWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(booking.owner, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
-                    Text(booking.address, style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                    Text(reservation.pickupLocation, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+                    Text('\$${reservation.totalAmount.toStringAsFixed(2)}', style: const TextStyle(color: Colors.white54, fontSize: 11)),
                   ],
                 ),
                 const Spacer(),
                 ElevatedButton(
-                  onPressed: () {},
+                  onPressed: onOpen,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: kCyan, foregroundColor: Colors.black,
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -252,49 +314,43 @@ class _DateChip extends StatelessWidget {
 }
 
 class _PastBookingCard extends StatelessWidget {
-  final _Booking booking;
-  const _PastBookingCard({required this.booking});
+  final ReservationData reservation;
+  final VoidCallback onOpen;
+  const _PastBookingCard({required this.reservation, required this.onOpen});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade200)),
-      child: Row(
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: CachedNetworkImage(
-              imageUrl: booking.imageUrl, width: 64, height: 48, fit: BoxFit.cover,
-              errorWidget: (_, __, ___) => Container(width: 64, height: 48, color: Colors.grey[200], child: const Icon(Icons.directions_car, color: Colors.grey)),
+    return GestureDetector(
+      onTap: onOpen,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade200)),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: reservation.pickupPhotos.isNotEmpty
+                  ? CachedNetworkImage(
+                      imageUrl: reservation.pickupPhotos.first, width: 64, height: 48, fit: BoxFit.cover,
+                      errorWidget: (_, __, ___) => Container(width: 64, height: 48, color: Colors.grey[200], child: const Icon(Icons.directions_car, color: Colors.grey)),
+                    )
+                  : Container(width: 64, height: 48, color: Colors.grey[200], child: const Icon(Icons.directions_car, color: Colors.grey)),
             ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(booking.carName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black)),
-                Text('${booking.pickupDate} — ${booking.returnDate} · ${booking.total.toInt()} €', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
-              ],
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Reserva ${reservation.reservationCode}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black)),
+                  Text('${reservation.startDate} — ${reservation.endDate} · \$${reservation.totalAmount.toStringAsFixed(2)}', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                ],
+              ),
             ),
-          ),
-          const Icon(Icons.chevron_right, color: Colors.grey),
-        ],
+            const Icon(Icons.chevron_right, color: Colors.grey),
+          ],
+        ),
       ),
     );
   }
-}
-
-class _Booking {
-  final String carName, carSub, imageUrl, pickupDate, returnDate;
-  final String owner, address, status;
-  final double total;
-  final bool isActive;
-  const _Booking({
-    required this.carName, required this.carSub, required this.imageUrl,
-    required this.pickupDate, required this.returnDate, required this.owner,
-    required this.address, required this.status, required this.total, required this.isActive,
-  });
 }

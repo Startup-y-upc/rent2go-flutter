@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
 import 'explore_screen.dart' show BottomNavBar;
+import 'validate_account_screen.dart';
 
 const kCyan = Color(0xFF00E5FF);
 
@@ -154,9 +155,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final accountType = user?.accountType ?? '';
     final emailVerified = user?.emailVerified ?? false;
     final phoneVerified = user?.phoneVerified ?? false;
-    // DNI y Carnet de conducir se muestran como verificados de forma estática
-    // (no dependen de ningún dato real del backend, son solo visuales por ahora).
-    final verifiedCount = (emailVerified ? 1 : 0) + (phoneVerified ? 1 : 0) + 2;
+    // F4: KYC (DNI/Carnet) refleja el campo real kyc_verified del backend,
+    // ya no un valor hardcodeado en true.
+    final kycVerified = user?.kycVerified ?? false;
+    final verifiedCount = (emailVerified ? 1 : 0) + (phoneVerified ? 1 : 0) + (kycVerified ? 2 : 0);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF0F4F8),
@@ -239,8 +241,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         borderRadius: BorderRadius.circular(2),
                       ),
                       const SizedBox(height: 14),
-                      const _VerifyRow(label: 'Identidad (DNI)', verified: true),
-                      const _VerifyRow(label: 'Carnet de conducir', verified: true),
+                      _VerifyRow(
+                        label: 'Identidad (DNI y licencia)',
+                        verified: kycVerified,
+                        action: kycVerified ? null : 'Verificar',
+                        onAction: () => context.push('/verify-identity'),
+                      ),
                       _VerifyRow(label: 'Email y teléfono', verified: emailVerified && phoneVerified),
                       const _VerifyRow(label: 'Foto de perfil', verified: false, action: 'Verificar'),
                     ],
@@ -398,7 +404,8 @@ class _VerifyRow extends StatelessWidget {
   final String label;
   final bool verified;
   final String? action;
-  const _VerifyRow({required this.label, required this.verified, this.action});
+  final VoidCallback? onAction;
+  const _VerifyRow({required this.label, required this.verified, this.action, this.onAction});
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 6),
@@ -409,7 +416,10 @@ class _VerifyRow extends StatelessWidget {
         Text(label, style: const TextStyle(fontSize: 14, color: Colors.black)),
         const Spacer(),
         if (action != null && !verified)
-          Text(action!, style: TextStyle(color: Colors.blue[600], fontSize: 13, fontWeight: FontWeight.w500))
+          GestureDetector(
+            onTap: onAction,
+            child: Text(action!, style: TextStyle(color: Colors.blue[600], fontSize: 13, fontWeight: FontWeight.w500)),
+          )
         else
           Text(verified ? 'Verificado' : 'Pendiente', style: TextStyle(color: verified ? Colors.green : Colors.orange[700], fontSize: 12, fontWeight: FontWeight.w500)),
       ],

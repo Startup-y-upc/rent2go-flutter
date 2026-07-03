@@ -1,9 +1,12 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
+import 'package:http/http.dart' as http;
 import '../widgets/common_widgets.dart';
 import '../services/auth_service.dart';
 import '../services/vehicle_service.dart';
+import '../services/reservation_service.dart';
 import '../models/vehicle_models.dart';
 
 class OwnerDashboardScreen extends StatefulWidget {
@@ -14,15 +17,22 @@ class OwnerDashboardScreen extends StatefulWidget {
 }
 
 class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
-  bool _requestHandled = false;
   String _firstName = '';
+  int _myId = 0;
   List<VehicleData> _vehicles = [];
+  List<ReservationData> _reservations = [];
+  double? _averageRating;
+  bool _loadingReservations = true;
+  String? _reservationsError;
 
   @override
   void initState() {
     super.initState();
-    _loadUser();
-    _loadVehicles();
+    _loadAll();
+  }
+
+  Future<void> _loadAll() async {
+    await Future.wait([_loadUser(), _loadVehicles(), _loadReservations(), _loadReputation()]);
   }
 
   Future<void> _loadUser() async {
@@ -31,7 +41,10 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       final name = user.fullName.trim().isNotEmpty
           ? user.fullName.trim().split(RegExp(r'\s+')).first
           : (user.username.isNotEmpty ? user.username : 'Usuario');
-      setState(() => _firstName = name);
+      setState(() {
+        _firstName = name;
+        _myId = user.userId;
+      });
     }
   }
 
@@ -41,6 +54,56 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       if (mounted) setState(() => _vehicles = vehicles);
     } catch (_) {
       // El dashboard sigue funcionando con el conteo en 0 si falla la carga.
+    }
+  }
+
+  Future<void> _loadReservations() async {
+    setState(() {
+      _loadingReservations = true;
+      _reservationsError = null;
+    });
+    final user = await AuthService.getCurrentUser();
+    if (user == null) {
+      if (mounted) {
+        setState(() {
+          _loadingReservations = false;
+          _reservationsError = 'No hay sesión activa.';
+        });
+      }
+      return;
+    }
+    try {
+      // Vista de owner: siempre GET /reservations/owner?ownerId=... — esta
+      // pantalla es role-fixed a owner, no hay ambigüedad sobre el endpoint.
+      final paged = await ReservationService.getMyReservationsAsOwner(ownerId: user.userId, size: 50);
+      if (!mounted) return;
+      setState(() {
+        _reservations = paged.content;
+        _loadingReservations = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loadingReservations = false;
+        _reservationsError = 'No se pudieron cargar tus reservas.';
+      });
+    }
+  }
+
+  Future<void> _loadReputation() async {
+    try {
+      final user = await AuthService.getCurrentUser();
+      if (user == null) return;
+      final token = await AuthService.getToken();
+      final uri = Uri.parse(
+          'https://rent2go-backend-production.up.railway.app/api/v1/community-trust/users/${user.userId}/reputation');
+      final response = await http.get(uri, headers: {if (token != null) 'Authorization': 'Bearer $token'});
+      if (response.statusCode == 200 && mounted) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        setState(() => _averageRating = (data['averageRating'] as num?)?.toDouble());
+      }
+    } catch (_) {
+      // Sin rating visible si falla — no se muestra un 4.9 falso.
     }
   }
 
@@ -56,20 +119,55 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     );
   }
 
-  Future<void> _openChatWithRenter() async {
-    final me = await AuthService.getCurrentUser();
-    final myId = me?.userId ?? 0;
+  Future<void> _openChatWithRenter(ReservationData reservation) async {
     if (!mounted) return;
     context.push('/chat', extra: {
-      'name': 'Marta L.',
-      'car': 'Tesla Model 3',
-      'isOnline': true,
-      // El usuario actual es el "owner" en este flujo (vista propietario).
-      'ownerId': myId,
-      'renterId': 6, // id de ejemplo de la renter Marta L.
-      'vehicleId': 1,
-      'reservationId': null,
+      'name': 'Cliente #${reservation.renterId}',
+      'car': 'Reserva ${reservation.reservationCode}',
+      'isOnline': false,
+      'ownerId': _myId,
+      'renterId': reservation.renterId,
+      'vehicleId': reservation.vehicleId,
+      'reservationId': reservation.id,
     });
+  }
+
+  Future<void> _confirmReservation(ReservationData r) async {
+    try {
+      await ReservationService.confirmReservation(r.id);
+      _showFeedback('¡Reserva ${r.reservationCode} aceptada!');
+      await _loadReservations();
+    } catch (e) {
+      _showFeedback('No se pudo aceptar la reserva.', isError: true);
+    }
+  }
+
+  Future<void> _cancelReservation(ReservationData r) async {
+    try {
+      // No existe un endpoint de "reject" dedicado — cancel es la acción
+      // terminal real del backend para "Rechazar" (confirmado por lectura directa).
+      await ReservationService.cancelReservation(
+        id: r.id,
+        requestedById: _myId,
+        reason: 'Rechazada por el propietario',
+      );
+      _showFeedback('Reserva ${r.reservationCode} rechazada');
+      await _loadReservations();
+    } catch (e) {
+      _showFeedback('No se pudo rechazar la reserva.', isError: true);
+    }
+  }
+
+  ReservationData? get _nextUpcoming {
+    final upcoming = _reservations.where((r) =>
+        ['CONFIRMED', 'ACTIVE'].contains(r.status.toUpperCase())).toList()
+      ..sort((a, b) => a.startDate.compareTo(b.startDate));
+    return upcoming.isNotEmpty ? upcoming.first : null;
+  }
+
+  ReservationData? get _firstPending {
+    final pending = _reservations.where((r) => r.status.toUpperCase() == 'PENDING').toList();
+    return pending.isNotEmpty ? pending.first : null;
   }
 
   @override
@@ -77,9 +175,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF0F4F8),
       body: RefreshIndicator(
-        onRefresh: () async {
-          await Future.wait([_loadUser(), _loadVehicles()]);
-        },
+        onRefresh: _loadAll,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           child: Column(
@@ -91,22 +187,26 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildStatsRow(_vehicles.length.toString()),
+                    _buildStatsRow(),
                     const SizedBox(height: 24),
-                    const Text(
-                      'Hoy - 12 May',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black),
-                    ),
-                    const SizedBox(height: 12),
-                    _buildTodayActivityCard(),
-                    const SizedBox(height: 24),
-                    if (!_requestHandled) ...[
-                      const Text(
-                        'Solicitudes pendientes',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black),
-                      ),
-                      const SizedBox(height: 12),
-                      _buildPendingRequestCard(),
+                    if (_loadingReservations)
+                      const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator()))
+                    else if (_reservationsError != null)
+                      _buildErrorCard(_reservationsError!)
+                    else ...[
+                      if (_nextUpcoming != null) ...[
+                        const Text('Próxima actividad', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black)),
+                        const SizedBox(height: 12),
+                        _buildTodayActivityCard(_nextUpcoming!),
+                        const SizedBox(height: 24),
+                      ],
+                      if (_firstPending != null) ...[
+                        const Text('Solicitudes pendientes', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black)),
+                        const SizedBox(height: 12),
+                        _buildPendingRequestCard(_firstPending!),
+                      ],
+                      if (_nextUpcoming == null && _firstPending == null)
+                        _buildEmptyReservationsCard(),
                     ],
                     const SizedBox(height: 100),
                   ],
@@ -118,6 +218,35 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       ),
     );
   }
+
+  Widget _buildErrorCard(String message) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(color: Colors.red[50], borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.red.shade200)),
+        child: Row(
+          children: [
+            const Icon(Icons.error_outline, color: Colors.redAccent),
+            const SizedBox(width: 12),
+            Expanded(child: Text(message, style: const TextStyle(color: Colors.redAccent))),
+            TextButton(onPressed: _loadReservations, child: const Text('Reintentar')),
+          ],
+        ),
+      );
+
+  Widget _buildEmptyReservationsCard() => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+        child: const Center(
+          child: Column(
+            children: [
+              Icon(Icons.event_available_outlined, size: 40, color: Colors.grey),
+              SizedBox(height: 8),
+              Text('Sin reservas por ahora', style: TextStyle(color: Colors.grey)),
+            ],
+          ),
+        ),
+      );
 
   Widget _buildHeader(BuildContext context) {
     return Stack(
@@ -147,25 +276,8 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               ),
               const SizedBox(height: 24),
               Text(
-                'Ingresos - este mes',
+                'Ver detalle en Ganancias',
                 style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 14),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                '1.284,50 €',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                height: 40,
-                width: double.infinity,
-                child: CustomPaint(
-                  painter: _ChartPainter(),
-                ),
               ),
             ],
           ),
@@ -196,13 +308,13 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     );
   }
 
-  Widget _buildStatsRow(String vehicleCount) {
+  Widget _buildStatsRow() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        _buildStatCard(vehicleCount, 'Vehículos'),
-        _buildStatCard('5', 'Reservas'),
-        _buildStatCard('4.9', 'Rating', isRating: true),
+        _buildStatCard(_vehicles.length.toString(), 'Vehículos'),
+        _buildStatCard(_reservations.length.toString(), 'Reservas'),
+        _buildStatCard(_averageRating != null ? _averageRating!.toStringAsFixed(1) : '—', 'Rating', isRating: true),
       ],
     );
   }
@@ -226,7 +338,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     );
   }
 
-  Widget _buildTodayActivityCard() {
+  Widget _buildTodayActivityCard(ReservationData reservation) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -244,9 +356,9 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                   color: const Color(0xFFE0F7FA),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: const Text(
-                  'Recogida - 10:00',
-                  style: TextStyle(
+                child: Text(
+                  'Recogida - ${reservation.startDate}',
+                  style: const TextStyle(
                     color: Color(0xFF00ACC1),
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
@@ -254,9 +366,9 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                 ),
               ),
               const Spacer(),
-              Text(
-                'en 2 horas',
-                style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
+              GestureDetector(
+                onTap: () => context.push('/reservation-detail', extra: reservation),
+                child: const Text('Ver detalle', style: TextStyle(color: kCyan, fontSize: 12, fontWeight: FontWeight.bold)),
               ),
             ],
           ),
@@ -265,30 +377,33 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                child: CachedNetworkImage(
-                  imageUrl: 'https://images.unsplash.com/photo-1560958089-b8a1929cea89?w=200&q=80',
-                  width: 80, height: 60, fit: BoxFit.cover,
-                ),
+                child: reservation.pickupPhotos.isNotEmpty
+                    ? CachedNetworkImage(
+                        imageUrl: reservation.pickupPhotos.first,
+                        width: 80, height: 60, fit: BoxFit.cover,
+                        errorWidget: (_, __, ___) => Container(width: 80, height: 60, color: Colors.grey[300], child: const Icon(Icons.directions_car)),
+                      )
+                    : Container(width: 80, height: 60, color: Colors.grey[300], child: const Icon(Icons.directions_car)),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Tesla Model 3',
-                      style: TextStyle(
+                    Text(
+                      'Reserva ${reservation.reservationCode}',
+                      style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 15,
                         color: Colors.black,
                       ),
                     ),
                     Text(
-                      '@Marta L.',
+                      'Cliente #${reservation.renterId}',
                       style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
                     ),
                     Text(
-                      '2 días - 95,00 €',
+                      '${reservation.startDate} → ${reservation.endDate} · \$${reservation.totalAmount.toStringAsFixed(2)}',
                       style: TextStyle(
                         color: Colors.grey.shade800,
                         fontWeight: FontWeight.w600,
@@ -305,7 +420,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
             children: [
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: _openChatWithRenter,
+                  onPressed: () => _openChatWithRenter(reservation),
                   icon: const Icon(Icons.chat_bubble_outline, size: 18),
                   label: const Text('Mensaje'),
                   style: OutlinedButton.styleFrom(
@@ -319,7 +434,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               const SizedBox(width: 12),
               Expanded(
                 child: ElevatedButton(
-                  onPressed: _showDeliveryDialog,
+                  onPressed: () => _showDeliveryDialog(reservation),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: kCyan,
                     foregroundColor: Colors.black,
@@ -336,7 +451,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     );
   }
 
-  void _showDeliveryDialog() {
+  void _showDeliveryDialog(ReservationData reservation) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -372,7 +487,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     );
   }
 
-  Widget _buildPendingRequestCard() {
+  Widget _buildPendingRequestCard(ReservationData reservation) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -384,18 +499,18 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
         children: [
           Row(
             children: [
-              const CircleAvatar(radius: 20, backgroundImage: NetworkImage('https://i.pravatar.cc/150?u=carlos')),
+              const CircleAvatar(radius: 20, backgroundColor: Colors.black12, child: Icon(Icons.person, color: Colors.black45)),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Carlos R.', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black)),
-                    Text('Mini Cooper S · 15 May → 17 May', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                    Text('Cliente #${reservation.renterId}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black)),
+                    Text('${reservation.startDate} → ${reservation.endDate}', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
                   ],
                 ),
               ),
-              const Text('76 €', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black)),
+              Text('\$${reservation.totalAmount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black)),
             ],
           ),
           const SizedBox(height: 16),
@@ -403,10 +518,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
             children: [
               Expanded(
                 child: TextButton(
-                  onPressed: () {
-                    setState(() => _requestHandled = true);
-                    _showFeedback('Reserva rechazada');
-                  },
+                  onPressed: () => _cancelReservation(reservation),
                   child: Text(
                     'Rechazar',
                     style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.bold),
@@ -416,10 +528,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               const SizedBox(width: 12),
               Expanded(
                 child: ElevatedButton(
-                  onPressed: () {
-                    setState(() => _requestHandled = true);
-                    _showFeedback('¡Reserva aceptada! Notificación enviada a Carlos.');
-                  },
+                  onPressed: () => _confirmReservation(reservation),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: kCyan,
                     foregroundColor: Colors.black,
@@ -435,47 +544,4 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       ),
     );
   }
-}
-
-class _ChartPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = kCyan.withOpacity(0.8)
-      ..strokeWidth = 2
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-
-    final path = Path();
-    path.moveTo(0, size.height * 0.75);
-
-    // Creates a smooth line that rises towards the end as in the design
-    path.cubicTo(
-      size.width * 0.3,
-      size.height * 0.8,
-      size.width * 0.7,
-      size.height * 0.7,
-      size.width,
-      size.height * 0.3,
-    );
-
-    canvas.drawPath(path, paint);
-
-    final fillPath = Path.from(path);
-    fillPath.lineTo(size.width, size.height);
-    fillPath.lineTo(0, size.height);
-    fillPath.close();
-
-    final fillPaint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [kCyan.withOpacity(0.15), kCyan.withOpacity(0)],
-      ).createShader(Rect.fromLTRB(0, 0, size.width, size.height));
-
-    canvas.drawPath(fillPath, fillPaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

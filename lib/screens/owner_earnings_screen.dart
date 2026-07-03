@@ -182,8 +182,12 @@ class _OwnerEarningsScreenState extends State<OwnerEarningsScreen> {
               ),
             ],
           ),
+          // F6 (Fase 4 diferida — sin endpoint de desglose mensual real todavía):
+          // se retira la fecha específica fabricada ("vie 16 May") en vez de
+          // presentarla como un dato real. Ver docs/planning/03-backlog-ado.md
+          // para el estado formal de este finding.
           const Text(
-            'Próximo ingreso · vie 16 May',
+            'Próximo ingreso: próximamente',
             style: TextStyle(color: Colors.white54, fontSize: 13),
           ),
           const SizedBox(height: 32),
@@ -258,9 +262,17 @@ class _OwnerEarningsScreenState extends State<OwnerEarningsScreen> {
               color: Colors.black,
             ),
           ),
-          const SizedBox(height: 20),
-          // Distribución mensual — pendiente de endpoint de desglose mensual;
-          // se mantiene el diseño visual mientras el total mostrado arriba es real (US24).
+          const SizedBox(height: 4),
+          // F6 diferido (ver plan IP-2026-07-02 §Phase 4/Phase 5 y
+          // docs/planning/03-backlog-ado.md): no existe todavía un endpoint de
+          // desglose mensual en el backend, por lo que la barra de abajo es un
+          // placeholder visual explícito, no datos reales por mes. El total de
+          // arriba SÍ es real (GET /payments/owners/{id}/earnings, US24).
+          Text(
+            'Desglose mensual: próximamente',
+            style: TextStyle(color: Colors.grey[400], fontSize: 11, fontStyle: FontStyle.italic),
+          ),
+          const SizedBox(height: 16),
           Container(
             height: 150,
             width: double.infinity,
