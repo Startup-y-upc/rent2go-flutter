@@ -313,6 +313,26 @@ class AuthService {
     }
   }
 
+  /// POST /api/v1/auth/verify — submits the token/code the user received by
+  /// email and pasted into a text field (profile screen), as an alternative
+  /// to a clickable magic link. Returns true on success (200), false on 400
+  /// (invalid/expired token per GlobalExceptionHandler's IllegalArgumentException
+  /// mapping) so callers can show a precise "invalid or expired code" message.
+  static Future<bool> verifyEmail({required int userId, required String token}) async {
+    final uri = Uri.parse('$baseUrl/auth/verify');
+    final response = await http.post(
+      uri,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'userId': userId, 'token': token}),
+    );
+
+    if (response.statusCode == 200) return true;
+    if (response.statusCode == 400) return false;
+
+    throw AuthException(_extractMessage(response, 'No se pudo verificar el código'),
+        statusCode: response.statusCode);
+  }
+
   static Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_tokenKey);

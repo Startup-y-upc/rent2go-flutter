@@ -30,6 +30,11 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
   Uint8List? _newImageBytes;
   final _picker = ImagePicker();
 
+  // Fix 2 — paste-code verification dialog state.
+  final _verificationCodeCtrl = TextEditingController();
+  bool _verifyingCode = false;
+  String? _verifyCodeError;
+
   @override
   void initState() {
     super.initState();
@@ -40,6 +45,7 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
   void dispose() {
     _nameCtrl.dispose();
     _phoneCtrl.dispose();
+    _verificationCodeCtrl.dispose();
     super.dispose();
   }
 
@@ -159,6 +165,98 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
     } finally {
       if (mounted) setState(() => _resendingVerification = false);
     }
+  }
+
+  /// Fix 2 — opens the paste-code dialog (alternative to a clickable magic
+  /// link): the user copies the token/code they received by email and pastes
+  /// it here to call POST /auth/verify directly with their own userId.
+  Future<void> _openVerifyCodeDialog() async {
+    _verificationCodeCtrl.clear();
+    setState(() => _verifyCodeError = null);
+
+    await showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: const Text('Verificar correo'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Pega el código que recibiste por correo electrónico.'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _verificationCodeCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Código de verificación',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              if (_verifyCodeError != null) ...[
+                const SizedBox(height: 8),
+                Text(_verifyCodeError!, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: _verifyingCode
+                  ? null
+                  : () async {
+                      final code = _verificationCodeCtrl.text.trim();
+                      if (code.isEmpty) {
+                        setDialogState(() => _verifyCodeError = 'Ingresa el código recibido por correo');
+                        setState(() => _verifyCodeError = 'Ingresa el código recibido por correo');
+                        return;
+                      }
+                      final userId = _user?.userId;
+                      if (userId == null) return;
+
+                      setDialogState(() => _verifyingCode = true);
+                      setState(() => _verifyingCode = true);
+                      try {
+                        final ok = await AuthService.verifyEmail(userId: userId, token: code);
+                        if (ok) {
+                          final fresh = await AuthService.fetchCurrentUser();
+                          if (mounted) {
+                            setState(() {
+                              if (fresh != null) _user = fresh;
+                              _verifyCodeError = null;
+                            });
+                          }
+                          if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Correo verificado correctamente'), backgroundColor: Colors.green),
+                            );
+                          }
+                        } else {
+                          setDialogState(() => _verifyCodeError = 'Código inválido o expirado');
+                          setState(() => _verifyCodeError = 'Código inválido o expirado');
+                        }
+                      } on AuthException catch (e) {
+                        setDialogState(() => _verifyCodeError = e.message);
+                        setState(() => _verifyCodeError = e.message);
+                      } catch (_) {
+                        setDialogState(() => _verifyCodeError = 'No se pudo conectar al servidor.');
+                        setState(() => _verifyCodeError = 'No se pudo conectar al servidor.');
+                      } finally {
+                        setDialogState(() => _verifyingCode = false);
+                        if (mounted) setState(() => _verifyingCode = false);
+                      }
+                    },
+              child: _verifyingCode
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Text('Verificar'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _save() async {
@@ -343,6 +441,18 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
                         action: _resendingVerification ? 'Enviando...' : 'Reverificar',
                         onAction: _resendingVerification ? null : _reverifyEmailAndPhone,
                       ),
+                      // Fix 2 — paste-code alternative to a clickable magic link.
+                      if (!emailVerified)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 32, bottom: 4),
+                          child: GestureDetector(
+                            onTap: _openVerifyCodeDialog,
+                            child: const Text(
+                              'Ingresar código',
+                              style: TextStyle(color: kCyan, fontSize: 12, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
                       _VerifyRow(
                         label: 'Teléfono verificado',
                         verified: phoneVerified,
