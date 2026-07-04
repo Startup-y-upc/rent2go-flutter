@@ -193,7 +193,7 @@ class _OwnerReservationHistoryScreenState extends State<OwnerReservationHistoryS
                 child: Text(reservation.status, style: const TextStyle(color: kCyan, fontWeight: FontWeight.bold, fontSize: 11)),
               ),
               const Spacer(),
-              Text('\$${reservation.totalAmount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black)),
+              Text('S/ ${reservation.totalAmount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black)),
             ],
           ),
           const SizedBox(height: 12),

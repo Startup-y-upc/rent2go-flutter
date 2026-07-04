@@ -108,6 +108,13 @@ class _ReservationDetailScreenState extends State<ReservationDetailScreen> {
       // Igual que en confirm_booking_screen.dart: llegar aquí sin excepción
       // significa que Stripe confirmó el cargo. Refrescamos la reserva desde
       // el backend para reflejar el nuevo estado (CONFIRMED tras el webhook).
+      //
+      // Bugfix (US58 follow-up): forzamos un sync contra Stripe ANTES de releer la reserva.
+      // El webhook payment_intent.succeeded es asíncrono y puede seguir en tránsito justo
+      // aquí — sin este sync, getReservation() podía devolver la reserva todavía en PENDING
+      // pese al cobro exitoso, dejando el botón de "reintentar pago" visible por error.
+      await PaymentsService.syncPayment(_reservation.id);
+
       if (!mounted) return;
       final refreshed = await ReservationService.getReservation(_reservation.id);
       if (!mounted) return;
@@ -178,7 +185,7 @@ class _ReservationDetailScreenState extends State<ReservationDetailScreen> {
             _row('Punto de recogida', _reservation.pickupLocation),
             _row('Punto de devolución', _reservation.returnLocation),
             _row('Cobertura', _reservation.coveragePlan),
-            _row('Total', '\$${_reservation.totalAmount.toStringAsFixed(2)}'),
+            _row('Total', 'S/ ${_reservation.totalAmount.toStringAsFixed(2)}'),
             if (_reservation.damageReport != null && _reservation.damageReport!.isNotEmpty)
               _row('Reporte de daños', _reservation.damageReport!),
             if (_retryError != null) ...[

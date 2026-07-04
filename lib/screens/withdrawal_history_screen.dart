@@ -176,7 +176,7 @@ class _WithdrawalHistoryScreenState extends State<WithdrawalHistoryScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('\$${w.amount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black)),
+                    Text('S/ ${w.amount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black)),
                     if (w.requestedAt != null)
                       Text(w.requestedAt!, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
                     if (w.payoutDestinationNote != null && w.payoutDestinationNote!.isNotEmpty)

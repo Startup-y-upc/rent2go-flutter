@@ -278,7 +278,7 @@ class _ActiveBookingCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(reservation.pickupLocation, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
-                    Text('\$${reservation.totalAmount.toStringAsFixed(2)}', style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                    Text('S/ ${reservation.totalAmount.toStringAsFixed(2)}', style: const TextStyle(color: Colors.white54, fontSize: 11)),
                   ],
                 ),
                 const Spacer(),
@@ -343,7 +343,7 @@ class _PastBookingCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('Reserva ${reservation.reservationCode}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black)),
-                  Text('${reservation.startDate} — ${reservation.endDate} · \$${reservation.totalAmount.toStringAsFixed(2)}', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                  Text('${reservation.startDate} — ${reservation.endDate} · S/ ${reservation.totalAmount.toStringAsFixed(2)}', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
                 ],
               ),
             ),

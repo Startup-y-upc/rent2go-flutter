@@ -263,6 +263,14 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
       // presentPaymentSheet() only completes without throwing once Stripe has confirmed
       // the charge — a declined card or an error surfaces as a StripeException below,
       // and the user closing the sheet surfaces as a StripeException with code Canceled.
+      //
+      // Bugfix (US58 follow-up): force-sync the reservation's payment status with the backend
+      // before navigating away. Stripe's `payment_intent.succeeded` webhook is asynchronous and
+      // can still be in flight at this point — without this sync, the very next screen
+      // (bookings_screen.dart) could read the reservation as still PENDING and show a stale
+      // "pay now" prompt despite the charge having just succeeded.
+      await PaymentsService.syncPayment(reservation.id);
+
       if (!mounted) return;
       setState(() => _submitState = _SubmitState.success);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -445,7 +453,7 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
                         ],
                       ),
                     ),
-                    Text(e.value.dailyRateUsd == 0 ? r'$0' : '\$${e.value.dailyRateUsd.toStringAsFixed(2)}/día', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black)),
+                    Text(e.value.dailyRateUsd == 0 ? r'$0' : 'S/ ${e.value.dailyRateUsd.toStringAsFixed(2)}/día', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black)),
                   ],
                 ),
               ),
@@ -459,13 +467,13 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
                 ? const Padding(padding: EdgeInsets.all(8), child: Center(child: CircularProgressIndicator()))
                 : Column(
                     children: [
-                      _PriceRow(label: '${vehicle.dailyPrice.toStringAsFixed(0)} × $_days días', value: '\$${_fare!.subtotal.toStringAsFixed(2)}'),
-                      _PriceRow(label: 'Cobertura ${_coverages[_coverageIndex].name}', value: '\$${_fare!.coverageFee.toStringAsFixed(2)}'),
-                      _PriceRow(label: 'Tasa de servicio', value: '\$${_fare!.serviceFee.toStringAsFixed(2)}'),
-                      if (_fare!.discount > 0) _PriceRow(label: 'Descuento', value: '-\$${_fare!.discount.toStringAsFixed(2)}'),
-                      if (_fare!.taxes > 0) _PriceRow(label: 'Impuestos', value: '\$${_fare!.taxes.toStringAsFixed(2)}'),
+                      _PriceRow(label: '${vehicle.dailyPrice.toStringAsFixed(0)} × $_days días', value: 'S/ ${_fare!.subtotal.toStringAsFixed(2)}'),
+                      _PriceRow(label: 'Cobertura ${_coverages[_coverageIndex].name}', value: 'S/ ${_fare!.coverageFee.toStringAsFixed(2)}'),
+                      _PriceRow(label: 'Tasa de servicio', value: 'S/ ${_fare!.serviceFee.toStringAsFixed(2)}'),
+                      if (_fare!.discount > 0) _PriceRow(label: 'Descuento', value: '-S/ ${_fare!.discount.toStringAsFixed(2)}'),
+                      if (_fare!.taxes > 0) _PriceRow(label: 'Impuestos', value: 'S/ ${_fare!.taxes.toStringAsFixed(2)}'),
                       const Divider(height: 20),
-                      _PriceRow(label: 'Total', value: '\$${_fare!.total.toStringAsFixed(2)}', bold: true),
+                      _PriceRow(label: 'Total', value: 'S/ ${_fare!.total.toStringAsFixed(2)}', bold: true),
                     ],
                   ),
           ),

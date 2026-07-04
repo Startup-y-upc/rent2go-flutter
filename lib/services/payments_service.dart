@@ -375,6 +375,32 @@ class PaymentsService {
     throw PaymentException('No se pudo iniciar el cobro. Intenta nuevamente.$detail');
   }
 
+  /// POST /api/v1/payments/reservations/{reservationId}/sync
+  ///
+  /// Bugfix (US58 follow-up): Stripe's `payment_intent.succeeded` webhook is asynchronous and can
+  /// reach the backend AFTER `Stripe.instance.presentPaymentSheet()` already returned success on
+  /// the client. Reading the reservation immediately afterwards (as confirm_booking_screen.dart
+  /// and reservation_detail_screen.dart both do) can therefore race the webhook and observe a
+  /// stale PENDING status even though the charge succeeded. This forces the backend to re-check
+  /// the PaymentIntent against Stripe directly and apply the same confirm/mark-paid transition
+  /// the webhook would have applied, before the reservation is re-read.
+  ///
+  /// Deliberately non-fatal: this is a defensive fallback, not the source of truth. If it fails
+  /// (network blip, Stripe API hiccup) the webhook will still eventually confirm the reservation
+  /// on its own, so callers must not surface this as a user-facing payment error.
+  static Future<void> syncPayment(int reservationId) async {
+    try {
+      final token = await AuthService.getToken();
+      final uri = Uri.parse('$baseUrl/payments/reservations/$reservationId/sync');
+      await http.post(
+        uri,
+        headers: {if (token != null) 'Authorization': 'Bearer $token'},
+      );
+    } catch (_) {
+      // Non-fatal — see doc comment above.
+    }
+  }
+
   /// GET /api/v1/payments/owners/{ownerId}/earnings?from=...&to=...
   /// Por defecto consulta los últimos 7 meses, para alinear con la vista
   /// "Últimos 7 meses" de owner_earnings_screen.dart.

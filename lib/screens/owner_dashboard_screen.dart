@@ -450,7 +450,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                       style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
                     ),
                     Text(
-                      '${reservation.startDate} → ${reservation.endDate} · \$${reservation.totalAmount.toStringAsFixed(2)}',
+                      '${reservation.startDate} → ${reservation.endDate} · S/ ${reservation.totalAmount.toStringAsFixed(2)}',
                       style: TextStyle(
                         color: Colors.grey.shade800,
                         fontWeight: FontWeight.w600,
@@ -613,7 +613,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                   ],
                 ),
               ),
-              Text('\$${reservation.totalAmount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black)),
+              Text('S/ ${reservation.totalAmount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black)),
             ],
           ),
           const SizedBox(height: 16),

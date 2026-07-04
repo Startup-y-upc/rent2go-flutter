@@ -127,7 +127,7 @@ class _OwnerEarningsScreenState extends State<OwnerEarningsScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Saldo disponible: \$${_report.availablePayoutAmount.toStringAsFixed(2)} ${_report.currency}'),
+              Text('Saldo disponible: S/ ${_report.availablePayoutAmount.toStringAsFixed(2)} ${_report.currency}'),
               const SizedBox(height: 12),
               TextField(
                 key: const Key('withdrawal_amount_field'),
@@ -504,7 +504,7 @@ class _OwnerEarningsScreenState extends State<OwnerEarningsScreen> {
         ),
         const SizedBox(width: 12),
         Text(
-          '\$${movement.amount.toStringAsFixed(2)}',
+          'S/ ${movement.amount.toStringAsFixed(2)}',
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black),
         ),
       ],
