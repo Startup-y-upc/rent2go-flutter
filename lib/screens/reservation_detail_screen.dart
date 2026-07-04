@@ -1,8 +1,13 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:go_router/go_router.dart';
+import 'package:latlong2/latlong.dart';
+import '../models/vehicle_models.dart';
 import '../services/payments_service.dart';
 import '../services/reservation_service.dart';
+import '../services/vehicle_service.dart';
 import '../widgets/common_widgets.dart';
 
 /// Vista de detalle de una reserva real (ReservationResource), abierta desde
@@ -27,10 +32,42 @@ class _ReservationDetailScreenState extends State<ReservationDetailScreen> {
   _PaymentRetryState _retryState = _PaymentRetryState.idle;
   String? _retryError;
 
+  // Issue 5 — vehicle enrichment (photo, location, basic details) for the
+  // "review before meeting the owner" ask. ReservationData only carries
+  // vehicleId, so this is loaded via a second, already-public GET /vehicles/{id}
+  // call (see VehicleService.getVehicleById for why this beats a backend
+  // embed here). Loading state is independent of the reservation's own data
+  // so a slow/failed vehicle fetch never blocks showing the reservation itself.
+  VehicleData? _vehicle;
+  bool _loadingVehicle = true;
+  String? _vehicleError;
+
   @override
   void initState() {
     super.initState();
     _reservation = widget.reservation;
+    _loadVehicle();
+  }
+
+  Future<void> _loadVehicle() async {
+    setState(() {
+      _loadingVehicle = true;
+      _vehicleError = null;
+    });
+    try {
+      final vehicle = await VehicleService.getVehicleById(_reservation.vehicleId);
+      if (!mounted) return;
+      setState(() {
+        _vehicle = vehicle;
+        _loadingVehicle = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _vehicleError = 'No se pudo cargar la información del vehículo.';
+        _loadingVehicle = false;
+      });
+    }
   }
 
   bool get _isProcessing => _retryState == _PaymentRetryState.processing;
@@ -134,6 +171,8 @@ class _ReservationDetailScreenState extends State<ReservationDetailScreen> {
               child: Text(_reservation.status, style: const TextStyle(color: kCyan, fontWeight: FontWeight.bold, fontSize: 12)),
             ),
             const SizedBox(height: 20),
+            _buildVehicleSection(),
+            const SizedBox(height: 20),
             _row('Recogida', _reservation.startDate),
             _row('Devolución', _reservation.endDate),
             _row('Punto de recogida', _reservation.pickupLocation),
@@ -227,6 +266,127 @@ class _ReservationDetailScreenState extends State<ReservationDetailScreen> {
     );
   }
 
+  /// Issue 5 — vehicle photo, make/model/year/details, and pickup location
+  /// (with an embedded map preview when coordinates are available), matching
+  /// Kotlin's BookingDetailVehicleCard baseline plus the location addition
+  /// the user asked for on both platforms.
+  Widget _buildVehicleSection() {
+    if (_loadingVehicle) {
+      return Container(
+        key: const Key('reservation_detail_vehicle_loading'),
+        height: 96,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(14)),
+        child: const CircularProgressIndicator(strokeWidth: 2.4),
+      );
+    }
+    if (_vehicleError != null || _vehicle == null) {
+      return Container(
+        key: const Key('reservation_detail_vehicle_error'),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(14)),
+        child: Row(
+          children: [
+            const Icon(Icons.directions_car_outlined, color: Colors.grey),
+            const SizedBox(width: 10),
+            Expanded(child: Text(_vehicleError ?? 'Vehículo no disponible', style: TextStyle(color: Colors.grey[600], fontSize: 13))),
+            TextButton(onPressed: _loadVehicle, child: const Text('Reintentar')),
+          ],
+        ),
+      );
+    }
+
+    final vehicle = _vehicle!;
+    return Container(
+      key: const Key('reservation_detail_vehicle_card'),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: (vehicle.primaryImageUrl != null && vehicle.primaryImageUrl!.isNotEmpty)
+                    ? CachedNetworkImage(
+                        imageUrl: vehicle.primaryImageUrl!,
+                        width: 90,
+                        height: 68,
+                        fit: BoxFit.cover,
+                        errorWidget: (_, __, ___) => Container(
+                          width: 90, height: 68, color: Colors.grey[300],
+                          child: const Icon(Icons.directions_car),
+                        ),
+                      )
+                    : Container(
+                        width: 90, height: 68, color: Colors.grey[300],
+                        child: const Icon(Icons.directions_car),
+                      ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('${vehicle.make} ${vehicle.model}',
+                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black)),
+                    const SizedBox(height: 2),
+                    Text('${vehicle.categoryName} · ${vehicle.year}',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+                    const SizedBox(height: 4),
+                    if (vehicle.transmission != null || vehicle.fuelType != null)
+                      Row(
+                        children: [
+                          const Icon(Icons.settings, size: 13, color: Colors.grey),
+                          const SizedBox(width: 4),
+                          Text(
+                            [if (vehicle.transmission != null) vehicle.transmission, if (vehicle.fuelType != null) vehicle.fuelType]
+                                .join(' · '),
+                            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                          ),
+                        ],
+                      ),
+                    if (vehicle.seats != null) ...[
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          const Icon(Icons.event_seat, size: 13, color: Colors.grey),
+                          const SizedBox(width: 4),
+                          Text('${vehicle.seats} asientos', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              const Icon(Icons.location_on_outlined, size: 16, color: kCyan),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(vehicle.location.isNotEmpty ? vehicle.location : 'Ubicación no especificada',
+                    style: const TextStyle(fontSize: 13, color: Colors.black87, fontWeight: FontWeight.w500)),
+              ),
+            ],
+          ),
+          if (vehicle.latitude != null && vehicle.longitude != null) ...[
+            const SizedBox(height: 10),
+            _VehicleLocationPreview(key: const Key('reservation_detail_vehicle_map'), latitude: vehicle.latitude!, longitude: vehicle.longitude!),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _row(String label, String value) => Padding(
         padding: const EdgeInsets.only(bottom: 14),
         child: Column(
@@ -238,4 +398,50 @@ class _ReservationDetailScreenState extends State<ReservationDetailScreen> {
           ],
         ),
       );
+}
+
+/// Issue 5 — small, non-interactive map preview of the vehicle's pickup coordinates, using
+/// the project's existing flutter_map/latlong2/OSM stack (same as location_picker_screen.dart)
+/// so the renter can see roughly where to meet the owner without leaving the app or needing a
+/// new map/API-key dependency. Interaction is disabled (this is a preview, not a picker).
+class _VehicleLocationPreview extends StatelessWidget {
+  final double latitude;
+  final double longitude;
+  const _VehicleLocationPreview({super.key, required this.latitude, required this.longitude});
+
+  @override
+  Widget build(BuildContext context) {
+    final point = LatLng(latitude, longitude);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: SizedBox(
+        height: 120,
+        child: IgnorePointer(
+          child: FlutterMap(
+            options: MapOptions(
+              initialCenter: point,
+              initialZoom: 14,
+              interactionOptions: const InteractionOptions(flags: InteractiveFlag.none),
+            ),
+            children: [
+              TileLayer(
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.rent2go.app',
+              ),
+              MarkerLayer(
+                markers: [
+                  Marker(
+                    point: point,
+                    width: 36,
+                    height: 36,
+                    child: const Icon(Icons.location_pin, color: Colors.redAccent, size: 36),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

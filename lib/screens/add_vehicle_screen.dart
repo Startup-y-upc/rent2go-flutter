@@ -243,7 +243,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
             _Field(label: 'VIN', controller: _vinCtrl, hint: 'Número de chasis'),
             const SizedBox(height: 14),
             _Field(
-              label: 'Precio por día (€)', controller: _priceCtrl, hint: '49',
+              label: 'Precio por día (S/)', controller: _priceCtrl, hint: '49',
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
             ),
             const SizedBox(height: 14),

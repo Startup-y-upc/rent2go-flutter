@@ -24,6 +24,30 @@ class VehicleService {
     throw Exception('No se pudieron cargar tus vehículos');
   }
 
+  /// GET /api/v1/vehicles/{id} — detalle público de un vehículo por id.
+  ///
+  /// Issue 5 (reservation detail parity): reservation_detail_screen.dart solo tenía
+  /// ReservationData.vehicleId, sin foto/ubicación/detalles del vehículo. Este endpoint ya
+  /// existe y es público (VehicleController#getVehicleDetails, sin filtro de autorización) —
+  /// igual al que usa Kotlin (VehicleRepositoryImpl.getVehicleById) para la misma pantalla.
+  /// Se prefiere este fetch cliente-a-endpoint-existente en vez de embeber un resumen del
+  /// vehículo en ReservationResource (como se hizo para renter/owner en TS18): a diferencia
+  /// del counterparty, que requiere una consulta cross-contexto autenticada a /users/{id},
+  /// el vehículo ya es 100% público vía este endpoint, así que no hay N+1 ni auth que evitar.
+  static Future<VehicleData> getVehicleById(int vehicleId) async {
+    final token = await AuthService.getToken();
+    final uri = Uri.parse('$baseUrl/vehicles/$vehicleId');
+    final response = await http.get(
+      uri,
+      headers: {if (token != null) 'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      return VehicleData.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    }
+    throw Exception('No se pudo cargar la información del vehículo');
+  }
+
   /// GET /api/v1/vehicles/categories
   static Future<List<VehicleCategory>> getCategories() async {
     final uri = Uri.parse('$baseUrl/vehicles/categories');

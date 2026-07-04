@@ -354,7 +354,7 @@ class _VehicleCard extends StatelessWidget {
               Container(width: 1, height: 30, color: Colors.black12),
               Expanded(child: _StatChip(value: '${vehicle.seats ?? '—'}', label: 'Asientos')),
               Container(width: 1, height: 30, color: Colors.black12),
-              Expanded(child: _StatChip(value: '${vehicle.dailyPrice.toStringAsFixed(0)} €', label: '/día')),
+              Expanded(child: _StatChip(value: '${vehicle.dailyPrice.toStringAsFixed(0)} S/', label: '/día')),
             ],
           ),
           const SizedBox(height: 10),

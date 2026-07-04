@@ -133,7 +133,7 @@ class _OwnerEarningsScreenState extends State<OwnerEarningsScreen> {
                 key: const Key('withdrawal_amount_field'),
                 controller: amountCtrl,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(labelText: 'Monto a retirar (USD)', border: OutlineInputBorder()),
+                decoration: const InputDecoration(labelText: 'Monto a retirar (PEN)', border: OutlineInputBorder()),
               ),
               const SizedBox(height: 12),
               TextField(

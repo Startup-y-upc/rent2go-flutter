@@ -25,7 +25,7 @@ class OwnerEarningsReport {
     return OwnerEarningsReport(
       totalAmount: (json['totalAmount'] as num?)?.toDouble() ?? 0.0,
       paymentsCount: (json['paymentsCount'] as num?)?.toInt() ?? 0,
-      currency: json['currency'] as String? ?? 'USD',
+      currency: json['currency'] as String? ?? 'PEN',
       availablePayoutCents: (json['availablePayoutCents'] as num?)?.toInt() ?? 0,
       pendingPayoutCents: (json['pendingPayoutCents'] as num?)?.toInt() ?? 0,
     );
@@ -34,7 +34,7 @@ class OwnerEarningsReport {
   /// Reporte vacío — se usa cuando el propietario no tiene historial de pagos,
   /// mostrando ceros en vez de un error (AC de US24).
   factory OwnerEarningsReport.empty() =>
-      OwnerEarningsReport(totalAmount: 0, paymentsCount: 0, currency: 'USD');
+      OwnerEarningsReport(totalAmount: 0, paymentsCount: 0, currency: 'PEN');
 }
 
 /// Métricas de desempeño de un vehículo (US24), obtenidas de
@@ -59,7 +59,7 @@ class VehiclePerformanceReport {
       vehicleId: (json['vehicleId'] as num?)?.toInt() ?? 0,
       reservationCount: (json['reservationCount'] as num?)?.toInt() ?? 0,
       totalRevenue: (json['totalRevenue'] as num?)?.toDouble() ?? 0.0,
-      currency: json['currency'] as String? ?? 'USD',
+      currency: json['currency'] as String? ?? 'PEN',
       occupancyPercentage: (json['occupancyPercentage'] as num?)?.toDouble() ?? 0.0,
     );
   }
@@ -70,7 +70,7 @@ class VehiclePerformanceReport {
         vehicleId: vehicleId,
         reservationCount: 0,
         totalRevenue: 0,
-        currency: 'USD',
+        currency: 'PEN',
         occupancyPercentage: 0,
       );
 }
@@ -126,7 +126,7 @@ class FareBreakdown {
   factory FareBreakdown.fromJson(Map<String, dynamic> json) {
     return FareBreakdown(
       amount: (json['amount'] as num?)?.toDouble() ?? 0.0,
-      currency: json['currency']?.toString() ?? 'USD',
+      currency: json['currency']?.toString() ?? 'PEN',
       subtotal: (json['subtotal'] as num?)?.toDouble() ?? 0.0,
       serviceFee: (json['serviceFee'] as num?)?.toDouble() ?? 0.0,
       coverageFee: (json['coverageFee'] as num?)?.toDouble() ?? 0.0,
@@ -284,7 +284,7 @@ class PaymentsService {
   static Future<FareBreakdown> calculateFare({
     required double baseAmount,
     required String coveragePlan,
-    String currency = 'USD',
+    String currency = 'PEN',
     String? promoCode,
   }) async {
     final token = await AuthService.getToken();
@@ -311,11 +311,31 @@ class PaymentsService {
   }
 
   /// POST /api/v1/payments/create-intent — crea el PaymentIntent real en el backend.
+  ///
+  /// Issue 2 fix: el default de moneda era 'pen' (Soles), pero el proyecto opera con una
+  /// cuenta de Stripe en modo TEST configurada en USD (ver Kotlin's Constants.kt/
+  /// CreateIntentRequest, que siempre usa "usd", y GET /coverage-plans, cuyo dailyRateUSD
+  /// confirma que las tarifas del backend están en dólares). Cobrar con currency='pen' sobre
+  /// un amountCents calculado a partir de una tarifa en USD habría cobrado un monto real
+  /// distinto (o habría sido rechazado por Stripe si la cuenta no tiene PEN habilitado) —
+  /// bug latente, no disparado aún porque ningún pago de Flutter había llegado a completarse
+  /// exitosamente. Alineado con Kotlin/backend: default ahora es 'usd'.
   static Future<PaymentIntentResult> createPaymentIntent({
     required int reservationId,
     required int amountCents,
     String currency = 'usd',
   }) async {
+    // Issue 1 fix (applied defensively here too, per Issue 2's side-by-side audit): the
+    // backend's CreateIntentRequest requires reservationId > 0 and amountCents > 0
+    // (@Positive) — reject client-side before the round-trip so a 0/invalid value never
+    // silently reaches the backend as an undiagnosable HTTP 422.
+    if (reservationId <= 0) {
+      throw PaymentException('ID de reserva inválido: no se puede iniciar el cobro.');
+    }
+    if (amountCents <= 0) {
+      throw PaymentException('Monto a cobrar inválido: no se puede iniciar el cobro.');
+    }
+
     final token = await AuthService.getToken();
     if (token == null) {
       throw PaymentException('No hay sesión activa para procesar el pago.');
@@ -338,7 +358,21 @@ class PaymentsService {
       return PaymentIntentResult.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
     }
 
-    throw PaymentException('No se pudo iniciar el cobro. Intenta nuevamente.');
+    // Previously the response body was discarded entirely on failure, making any real
+    // validation error (backend's GlobalExceptionHandler returns field+message detail on a
+    // 422) invisible to both developers and users. Now surfaced when present.
+    String detail = '';
+    try {
+      final body = jsonDecode(response.body);
+      if (body is Map && body['message'] != null) {
+        detail = ' (${body['message']})';
+      } else if (body is Map && body['errors'] != null) {
+        detail = ' (${body['errors']})';
+      }
+    } catch (_) {
+      // Non-JSON or empty body — ignore, keep the generic message.
+    }
+    throw PaymentException('No se pudo iniciar el cobro. Intenta nuevamente.$detail');
   }
 
   /// GET /api/v1/payments/owners/{ownerId}/earnings?from=...&to=...
