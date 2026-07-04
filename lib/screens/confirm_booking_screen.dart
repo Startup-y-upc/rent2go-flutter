@@ -6,6 +6,7 @@ import '../models/vehicle_models.dart';
 import '../services/auth_service.dart';
 import '../services/payments_service.dart';
 import '../services/reservation_service.dart';
+import '../services/vehicle_service.dart';
 import '../widgets/common_widgets.dart';
 
 class ConfirmBookingScreen extends StatefulWidget {
@@ -29,8 +30,8 @@ enum _SubmitState {
 }
 
 class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
-  late final DateTime _startDate;
-  late final DateTime _endDate;
+  late DateTime _startDate;
+  late DateTime _endDate;
 
   _LoadState _loadState = _LoadState.loading;
   List<CoveragePlan> _coverages = [];
@@ -38,6 +39,13 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
   FareBreakdown? _fare;
   bool _calculating = false;
   String? _loadError;
+
+  // Bloqueos de disponibilidad del vehículo (reservas/bloqueos existentes),
+  // usados solo para advertir de conflictos al elegir fechas en esta pantalla
+  // — no reemplaza la validación autoritativa del backend en POST /reservations.
+  List<AvailabilityBlock> _availabilityBlocks = [];
+  bool _loadingAvailability = false;
+  String? _dateConflictWarning;
 
   _SubmitState _submitState = _SubmitState.idle;
   String? _submitError;
@@ -50,6 +58,89 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
     _startDate = widget.startDate ?? DateTime.now().add(const Duration(days: 2));
     _endDate = widget.endDate ?? _startDate.add(const Duration(days: 2));
     _loadCoveragePlans();
+    _loadAvailabilityBlocks();
+  }
+
+  DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  Future<void> _loadAvailabilityBlocks() async {
+    setState(() => _loadingAvailability = true);
+    try {
+      final blocks = await VehicleService.getAvailabilityBlocks(widget.vehicle.id);
+      if (!mounted) return;
+      setState(() {
+        _availabilityBlocks = blocks;
+        _loadingAvailability = false;
+      });
+      _checkDateConflict();
+    } catch (_) {
+      // Nice-to-have: si no se puede cargar la disponibilidad, no bloqueamos
+      // el flujo de reserva — el backend sigue siendo la validación autoritativa.
+      if (!mounted) return;
+      setState(() => _loadingAvailability = false);
+    }
+  }
+
+  /// Advierte (no bloquea) si el rango elegido se solapa con un bloqueo o
+  /// reserva existente — la validación real ocurre en el backend al crear
+  /// la reserva (POST /api/v1/reservations), esto es solo feedback temprano.
+  void _checkDateConflict() {
+    final conflict = _availabilityBlocks.any((b) {
+      final blockStart = _dateOnly(b.startDate);
+      final blockEnd = _dateOnly(b.endDate);
+      // Comparación inclusiva en ambos extremos: con recogida y devolución en
+      // el mismo día (rango de ancho cero), el día elegido debe seguir
+      // detectándose como conflicto si cae dentro de un bloqueo existente,
+      // incluyendo si coincide exactamente con blockStart o blockEnd.
+      return !_startDate.isAfter(blockEnd) && !_endDate.isBefore(blockStart);
+    });
+    setState(() {
+      _dateConflictWarning = conflict
+          ? 'Las fechas elegidas se solapan con una reserva o bloqueo existente de este vehículo. Puedes continuar, pero el backend podría rechazar la reserva.'
+          : null;
+    });
+  }
+
+  Future<void> _pickStartDate() async {
+    if (_isSubmitting) return;
+    final today = _dateOnly(DateTime.now());
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _startDate.isBefore(today) ? today : _startDate,
+      firstDate: today,
+      lastDate: today.add(const Duration(days: 365)),
+      helpText: 'Fecha de recogida',
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _startDate = picked;
+      // La devolución puede coincidir con la recogida (mismo día = 1 día de
+      // alquiler, no 0). Solo la re-ajustamos si quedó ANTES de la nueva
+      // recogida, nunca forzamos que sea un día distinto.
+      if (_endDate.isBefore(_startDate)) {
+        _endDate = _startDate;
+      }
+    });
+    _checkDateConflict();
+    await _recalculateFare();
+  }
+
+  Future<void> _pickEndDate() async {
+    if (_isSubmitting) return;
+    // La devolución puede ser el mismo día que la recogida (mínimo 1 día de
+    // alquiler) — no forzamos un día posterior.
+    final minEnd = _startDate;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _endDate.isBefore(minEnd) ? minEnd : _endDate,
+      firstDate: minEnd,
+      lastDate: minEnd.add(const Duration(days: 365)),
+      helpText: 'Fecha de devolución',
+    );
+    if (picked == null || !mounted) return;
+    setState(() => _endDate = picked);
+    _checkDateConflict();
+    await _recalculateFare();
   }
 
   Future<void> _loadCoveragePlans() async {
@@ -286,9 +377,46 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          _DetailRow(icon: Icons.calendar_today_outlined, label: 'Recogida', value: _fmt(_startDate)),
-          _DetailRow(icon: Icons.access_time_outlined, label: 'Devolución', value: _fmt(_endDate)),
+          _DetailRow(
+            icon: Icons.calendar_today_outlined,
+            label: 'Recogida',
+            value: _fmt(_startDate),
+            onTap: _isSubmitting ? null : _pickStartDate,
+            testKey: const Key('confirmBooking_startDateRow'),
+          ),
+          _DetailRow(
+            icon: Icons.access_time_outlined,
+            label: 'Devolución',
+            value: _fmt(_endDate),
+            onTap: _isSubmitting ? null : _pickEndDate,
+            testKey: const Key('confirmBooking_endDateRow'),
+          ),
           _DetailRow(icon: Icons.location_on_outlined, label: 'Punto de encuentro', value: vehicle.location),
+          if (_loadingAvailability) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+                const SizedBox(width: 8),
+                Text('Verificando disponibilidad…', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+              ],
+            ),
+          ],
+          if (_dateConflictWarning != null) ...[
+            const SizedBox(height: 8),
+            Container(
+              key: const Key('confirmBooking_dateConflictWarning'),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.orange.shade200)),
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(_dateConflictWarning!, style: const TextStyle(color: Colors.deepOrange, fontSize: 12))),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 20),
           const Text('Cobertura', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black)),
           const SizedBox(height: 12),
@@ -384,24 +512,35 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
 class _DetailRow extends StatelessWidget {
   final IconData icon;
   final String label, value;
-  const _DetailRow({required this.icon, required this.label, required this.value});
+  final VoidCallback? onTap;
+  final Key? testKey;
+  const _DetailRow({required this.icon, required this.label, required this.value, this.onTap, this.testKey});
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 12),
-    child: Row(
+  Widget build(BuildContext context) {
+    final row = Row(
       children: [
         Container(width: 36, height: 36, decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)), child: Icon(icon, size: 18, color: Colors.black54)),
         const SizedBox(width: 12),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label, style: TextStyle(color: Colors.grey[400], fontSize: 11)),
-            Text(value, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13, color: Colors.black)),
-          ],
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: TextStyle(color: Colors.grey[400], fontSize: 11)),
+              Text(value, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13, color: Colors.black)),
+            ],
+          ),
         ),
+        if (onTap != null) const Icon(Icons.edit_calendar_outlined, size: 18, color: Colors.black45),
       ],
-    ),
-  );
+    );
+    return Padding(
+      key: testKey,
+      padding: const EdgeInsets.only(bottom: 12),
+      child: onTap == null
+          ? row
+          : InkWell(borderRadius: BorderRadius.circular(8), onTap: onTap, child: row),
+    );
+  }
 }
 
 class _PriceRow extends StatelessWidget {

@@ -3,10 +3,60 @@ import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/vehicle_models.dart';
 import '../services/auth_service.dart';
+import '../services/dispute_service.dart';
 
-class CarDetailScreen extends StatelessWidget {
+class CarDetailScreen extends StatefulWidget {
   final VehicleData vehicle;
   const CarDetailScreen({super.key, required this.vehicle});
+
+  @override
+  State<CarDetailScreen> createState() => _CarDetailScreenState();
+}
+
+class _CarDetailScreenState extends State<CarDetailScreen> {
+  VehicleData get vehicle => widget.vehicle;
+
+  bool _reviewsLoading = true;
+  String? _reviewsError;
+  VehicleRatingData? _rating;
+  List<VehicleReviewData> _reviews = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadReviews();
+  }
+
+  Future<void> _loadReviews() async {
+    setState(() {
+      _reviewsLoading = true;
+      _reviewsError = null;
+    });
+    try {
+      final results = await Future.wait([
+        DisputeService.getVehicleRating(vehicle.id),
+        DisputeService.getVehicleReviews(vehicle.id),
+      ]);
+      if (!mounted) return;
+      final rating = results[0] as VehicleRatingData;
+      final reviews = (results[1] as List<VehicleReviewData>)
+          // Solo reseñas aprobadas — el backend no filtra por status en este
+          // endpoint (a diferencia de /rating, que sí excluye no-aprobadas).
+          .where((r) => r.status == null || r.status!.toUpperCase() == 'APPROVED')
+          .toList();
+      setState(() {
+        _rating = rating;
+        _reviews = reviews;
+        _reviewsLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _reviewsError = 'No se pudieron cargar las reseñas.';
+        _reviewsLoading = false;
+      });
+    }
+  }
 
   Future<void> _openChat(BuildContext context) async {
     final me = await AuthService.getCurrentUser();
@@ -124,6 +174,17 @@ class CarDetailScreen extends StatelessWidget {
                           children: vehicle.features.map((f) => Chip(label: Text(f, style: const TextStyle(fontSize: 12)), backgroundColor: Colors.grey[100])).toList(),
                         ),
                       ],
+                      const SizedBox(height: 20),
+                      const Text('RESEÑAS', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1)),
+                      const SizedBox(height: 8),
+                      _ReviewsSection(
+                        key: const Key('car_detail_reviews_section'),
+                        loading: _reviewsLoading,
+                        error: _reviewsError,
+                        rating: _rating,
+                        reviews: _reviews,
+                        onRetry: _loadReviews,
+                      ),
                       const SizedBox(height: 100),
                     ],
                   ),
@@ -205,4 +266,131 @@ class _SpecItem extends StatelessWidget {
 class _Divider extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(width: 1, height: 40, color: Colors.grey.shade200);
+}
+
+/// Sección de reseñas/calificación del vehículo — antes inexistente en Flutter.
+/// Consume GET /community-trust/vehicles/{id}/rating y
+/// GET /community-trust/reviews/vehicle/{id} (ver dispute_service.dart).
+/// Un vehículo sin reseñas es un resultado vacío válido, no un error.
+class _ReviewsSection extends StatelessWidget {
+  final bool loading;
+  final String? error;
+  final VehicleRatingData? rating;
+  final List<VehicleReviewData> reviews;
+  final VoidCallback onRetry;
+
+  const _ReviewsSection({
+    super.key,
+    required this.loading,
+    required this.error,
+    required this.rating,
+    required this.reviews,
+    required this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const Key('reviews_section_container'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: Colors.grey[50], borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade200)),
+      child: _buildContent(context),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
+    if (loading) {
+      return const Center(
+        key: Key('reviews_loading_state'),
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 8),
+          child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2)),
+        ),
+      );
+    }
+    if (error != null) {
+      return Column(
+        key: const Key('reviews_error_state'),
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(error!, style: TextStyle(color: Colors.red[700], fontSize: 13)),
+          const SizedBox(height: 8),
+          TextButton(
+            key: const Key('reviews_retry_button'),
+            onPressed: onRetry,
+            child: const Text('Reintentar'),
+          ),
+        ],
+      );
+    }
+
+    final hasRating = rating != null && rating!.count > 0;
+    final hasReviews = reviews.isNotEmpty;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (hasRating) ...[
+          Row(
+            key: const Key('reviews_rating_summary'),
+            children: [
+              const Icon(Icons.star, color: Colors.amber, size: 20),
+              const SizedBox(width: 6),
+              Text(
+                '${rating!.average.toStringAsFixed(1)} · ${rating!.count} reseña${rating!.count == 1 ? '' : 's'}',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+        ],
+        if (!hasReviews)
+          const Text(
+            'Este vehículo aún no tiene reseñas',
+            key: Key('reviews_empty_state'),
+            style: TextStyle(fontSize: 13, color: Colors.grey),
+          )
+        else
+          Column(
+            key: const Key('reviews_list'),
+            children: [
+              for (int i = 0; i < reviews.length && i < 5; i++) ...[
+                if (i > 0) Divider(height: 16, color: Colors.grey.shade200),
+                _ReviewTile(review: reviews[i]),
+              ],
+            ],
+          ),
+      ],
+    );
+  }
+}
+
+class _ReviewTile extends StatelessWidget {
+  final VehicleReviewData review;
+  const _ReviewTile({required this.review});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Icon(Icons.star, color: Colors.amber, size: 14),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('${review.rating}/5', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Colors.black)),
+              if (review.comment != null && review.comment!.trim().isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(review.comment!, style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 }

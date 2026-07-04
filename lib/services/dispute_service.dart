@@ -70,6 +70,70 @@ class DisputeException implements Exception {
   String toString() => message;
 }
 
+/// VehicleRatingResource exacto del backend: GET /vehicles/{vehicleId}/rating
+/// (vehicleId, averageRating, reviewCount). Un vehículo sin reseñas devuelve
+/// average=0/count=0, no un error — la UI debe tratarlo como "sin reseñas aún".
+class VehicleRatingData {
+  final int vehicleId;
+  final double average;
+  final int count;
+
+  VehicleRatingData({required this.vehicleId, required this.average, required this.count});
+
+  factory VehicleRatingData.fromJson(Map<String, dynamic> json) {
+    return VehicleRatingData(
+      vehicleId: (json['vehicleId'] as num?)?.toInt() ?? 0,
+      average: (json['averageRating'] as num?)?.toDouble() ?? 0.0,
+      count: (json['reviewCount'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+/// ReviewResource exacto del backend (GET /reviews/vehicle/{vehicleId}).
+/// No incluye datos del revisor más allá de su id — el backend no expone un
+/// CounterpartyDto para reviews, así que no se muestra nombre de reviewer aquí
+/// (mismo alcance que la sección equivalente en Kotlin's CarDetailScreen.kt).
+class VehicleReviewData {
+  final int id;
+  final int? reservationId;
+  final int vehicleId;
+  final int reviewerId;
+  final int? reviewedUserId;
+  final String? category;
+  final int rating;
+  final String? status;
+  final String? comment;
+  final String? createdAt;
+
+  VehicleReviewData({
+    required this.id,
+    this.reservationId,
+    required this.vehicleId,
+    required this.reviewerId,
+    this.reviewedUserId,
+    this.category,
+    required this.rating,
+    this.status,
+    this.comment,
+    this.createdAt,
+  });
+
+  factory VehicleReviewData.fromJson(Map<String, dynamic> json) {
+    return VehicleReviewData(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      reservationId: (json['reservationId'] as num?)?.toInt(),
+      vehicleId: (json['vehicleId'] as num?)?.toInt() ?? 0,
+      reviewerId: (json['reviewerId'] as num?)?.toInt() ?? 0,
+      reviewedUserId: (json['reviewedUserId'] as num?)?.toInt(),
+      category: json['category']?.toString(),
+      rating: (json['rating'] as num?)?.toInt() ?? 0,
+      status: json['status']?.toString(),
+      comment: json['comment']?.toString(),
+      createdAt: json['createdAt']?.toString(),
+    );
+  }
+}
+
 class DisputeService {
   static const String baseUrl = 'https://rent2go-backend-production.up.railway.app/api/v1';
 
@@ -144,5 +208,32 @@ class DisputeService {
     if (response.statusCode != 200 && response.statusCode != 201) {
       throw DisputeException('No se pudo enviar tu calificación. Intenta nuevamente.');
     }
+  }
+
+  /// GET /api/v1/community-trust/vehicles/{vehicleId}/rating
+  /// Backend siempre devuelve 200 con average=0/count=0 cuando el vehículo
+  /// aún no tiene reseñas aprobadas — nunca un 404, así que esto no lanza
+  /// por "sin reseñas todavía".
+  static Future<VehicleRatingData> getVehicleRating(int vehicleId) async {
+    final token = await AuthService.getToken();
+    final uri = Uri.parse('$baseUrl/community-trust/vehicles/$vehicleId/rating');
+    final response = await http.get(uri, headers: _authHeaders(token));
+    if (response.statusCode == 200) {
+      return VehicleRatingData.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    }
+    throw DisputeException('No se pudo cargar la calificación del vehículo.');
+  }
+
+  /// GET /api/v1/community-trust/reviews/vehicle/{vehicleId}
+  /// Devuelve una lista vacía (no error) cuando el vehículo no tiene reseñas.
+  static Future<List<VehicleReviewData>> getVehicleReviews(int vehicleId) async {
+    final token = await AuthService.getToken();
+    final uri = Uri.parse('$baseUrl/community-trust/reviews/vehicle/$vehicleId');
+    final response = await http.get(uri, headers: _authHeaders(token));
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body) as List<dynamic>;
+      return data.map((e) => VehicleReviewData.fromJson(e as Map<String, dynamic>)).toList();
+    }
+    throw DisputeException('No se pudieron cargar las reseñas del vehículo.');
   }
 }

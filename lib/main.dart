@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:go_router/go_router.dart';
@@ -28,9 +29,17 @@ import 'screens/terms_screen.dart';
 import 'services/auth_service.dart';
 import 'models/vehicle_models.dart';
 
+// Stripe test-mode publishable key (US58/TS16). Client-side publishable key —
+// safe to ship in the app binary. Must match the Stripe TEST account whose
+// secret key (STRIPE_SECRET_KEY) the backend currently targets, or PaymentIntent
+// confirmation will fail with a "no such payment_intent"/authentication-style
+// error that can present to the user as a generic decline. Override at build
+// time with --dart-define=STRIPE_PUBLISHABLE_KEY=pk_test_... if testing against
+// a different Stripe test account than the one below.
 const String kStripePublishableKey = String.fromEnvironment(
   'STRIPE_PUBLISHABLE_KEY',
-  defaultValue: 'pk_test_51000000000000000000000000000000000000000000000000000000000000',
+  defaultValue:
+      'pk_test_51Th2unJzufJTi3cmRVyqzL0RGDe1fxxjL6v0en5nB1YE63CEZYUeJMKMMgEFnPhoGA2q1YgGxMI6FkBxY2Q7qzcQ00QJmxasJ8',
 );
 
 void main() async {
@@ -40,8 +49,13 @@ void main() async {
   await Hive.openBox('user_docs');
   await Hive.openBox('user_profile');
   await Hive.openBox('conversations_map');
-  Stripe.publishableKey = kStripePublishableKey;
-  await Stripe.instance.applySettings();
+  // flutter_stripe only supports Android/iOS (it calls Platform.operatingSystem
+  // internally, which throws unconditionally on web) — this app targets mobile
+  // only, so Stripe init is skipped entirely on web rather than attempted.
+  if (!kIsWeb) {
+    Stripe.publishableKey = kStripePublishableKey;
+    await Stripe.instance.applySettings();
+  }
   runApp(const Rent2GoApp());
 }
 
