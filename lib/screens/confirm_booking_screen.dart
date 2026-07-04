@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/vehicle_models.dart';
@@ -17,7 +18,15 @@ class ConfirmBookingScreen extends StatefulWidget {
 }
 
 enum _LoadState { loading, ready, error }
-enum _SubmitState { idle, processingPayment, creatingReservation, success, paymentFailed, reservationFailed }
+enum _SubmitState {
+  idle,
+  processingPayment,
+  creatingReservation,
+  success,
+  paymentFailed,
+  reservationFailed,
+  paymentAbandoned,
+}
 
 class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
   late final DateTime _startDate;
@@ -139,11 +148,9 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
       return;
     }
 
-    // Paso 2: crear el PaymentIntent real en el backend contra la reserva ya creada.
-    // NOTA: no existe un SDK de Stripe integrado en la app Flutter todavía
-    // (no está en pubspec.yaml) — la confirmación de tarjeta con Stripe queda
-    // fuera de alcance de este plan (ver plan §"Out of scope"); este flujo
-    // valida que el intent de cobro se cree correctamente en el backend real.
+    // Paso 2: crear el PaymentIntent real en el backend contra la reserva ya creada, y
+    // confirmarlo con Stripe PaymentSheet (US58/TS16) — ya no basta con que el intent
+    // exista: el pago solo se considera exitoso si Stripe confirma el cargo (modo test).
     setState(() => _submitState = _SubmitState.processingPayment);
     try {
       final intent = await PaymentsService.createPaymentIntent(
@@ -153,12 +160,45 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
       if (intent.clientSecret.isEmpty) {
         throw PaymentException('El pago no pudo iniciarse.');
       }
+
+      await Stripe.instance.initPaymentSheet(
+        paymentSheetParameters: SetupPaymentSheetParameters(
+          paymentIntentClientSecret: intent.clientSecret,
+          merchantDisplayName: 'Rent2Go',
+        ),
+      );
+      await Stripe.instance.presentPaymentSheet();
+
+      // presentPaymentSheet() only completes without throwing once Stripe has confirmed
+      // the charge — a declined card or an error surfaces as a StripeException below,
+      // and the user closing the sheet surfaces as a StripeException with code Canceled.
       if (!mounted) return;
       setState(() => _submitState = _SubmitState.success);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Reserva ${reservation.reservationCode} creada — pago en proceso'), backgroundColor: Colors.green),
+        SnackBar(content: Text('Reserva ${reservation.reservationCode} creada y pago confirmado'), backgroundColor: Colors.green),
       );
       context.go('/bookings');
+    } on StripeException catch (e) {
+      if (!mounted) return;
+      final isUserCancelled = e.error.code == FailureCode.Canceled;
+      if (isUserCancelled) {
+        // Escenario 3 de US58: el usuario cerró la hoja de pago sin completarla —
+        // la reserva sigue en su estado previo (pendiente), no se marca pagada ni fallida.
+        setState(() {
+          _submitState = _SubmitState.paymentAbandoned;
+          _submitError = 'Pago cancelado. La reserva ${reservation.reservationCode} quedó pendiente de pago; '
+              'puedes reintentarlo cuando quieras desde "Mis reservas".';
+        });
+      } else {
+        // Escenario 2 de US58: tarjeta rechazada u otro error de Stripe — estado de
+        // error visible, con el código de la reserva ya creada, permitiendo reintentar.
+        setState(() {
+          _submitState = _SubmitState.paymentFailed;
+          _submitError = 'La reserva ${reservation.reservationCode} se creó, pero el cobro falló: '
+              '${e.error.localizedMessage ?? e.error.message ?? "tarjeta rechazada"}. '
+              'Revisa "Mis reservas" para reintentar el pago.';
+        });
+      }
     } on PaymentException catch (e) {
       // Riesgo explícito del plan: la reserva se creó pero el cobro falló —
       // se muestra un estado de error visible con el código de la reserva ya
@@ -324,7 +364,12 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
               child: _isSubmitting
                   ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white))
                   : Text(
-                      _submitState == _SubmitState.reservationFailed ? 'Reintentar reserva' : 'Pagar y reservar',
+                      _submitState == _SubmitState.reservationFailed
+                          ? 'Reintentar reserva'
+                          : (_submitState == _SubmitState.paymentFailed ||
+                                  _submitState == _SubmitState.paymentAbandoned)
+                              ? 'Reintentar pago'
+                              : 'Pagar y reservar',
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                     ),
             ),

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:latlong2/latlong.dart';
 import '../models/vehicle_models.dart';
 import '../services/vehicle_service.dart';
 import '../widgets/common_widgets.dart';
+import 'location_picker_screen.dart';
 
 class EditVehicleScreen extends StatefulWidget {
   final VehicleData vehicle;
@@ -32,6 +34,10 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
   bool _saving = false;
   String? _errorMsg;
 
+  // US65 — pre-seeded with the vehicle's existing coordinates, re-editable via the
+  // same LocationPickerScreen used by add_vehicle_screen.dart.
+  LatLng? _pickedLocation;
+
   static const _transmissions = ['MANUAL', 'AUTOMATIC'];
   static const _fuelTypes = ['GASOLINE', 'DIESEL', 'ELECTRIC', 'HYBRID'];
 
@@ -52,7 +58,20 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
     _fuelType = _fuelTypes.contains(v.fuelType?.toUpperCase())
         ? v.fuelType!.toUpperCase()
         : null;
+    _pickedLocation = (v.latitude != null && v.longitude != null && (v.latitude != 0 || v.longitude != 0))
+        ? LatLng(v.latitude!, v.longitude!)
+        : null;
     _loadCategories();
+  }
+
+  Future<void> _openLocationPicker() async {
+    final picked = await showLocationPicker(context, initialLocation: _pickedLocation);
+    if (picked != null) {
+      setState(() {
+        _pickedLocation = picked;
+        _errorMsg = null;
+      });
+    }
   }
 
   Future<void> _loadCategories() async {
@@ -80,6 +99,11 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
       setState(() => _errorMsg = 'Selecciona el tipo de combustible');
       return;
     }
+    // US65 — required, same as add_vehicle_screen.dart.
+    if (_pickedLocation == null) {
+      setState(() => _errorMsg = 'Marca la ubicación del vehículo en el mapa');
+      return;
+    }
 
     setState(() {
       _saving = true;
@@ -98,8 +122,8 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
         seats: _seatsCtrl.text.trim().isNotEmpty ? int.parse(_seatsCtrl.text.trim()) : null,
         transmission: _transmission!,
         fuelType: _fuelType!,
-        latitude: widget.vehicle.latitude,
-        longitude: widget.vehicle.longitude,
+        latitude: _pickedLocation!.latitude,
+        longitude: _pickedLocation!.longitude,
       );
 
       // El precio se actualiza con su propio endpoint
@@ -220,6 +244,38 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
             ),
             const SizedBox(height: 14),
             _Field(label: 'Ubicación', controller: _locationCtrl),
+            const SizedBox(height: 14),
+
+            // US65 — required map-picked location, pre-seeded with the vehicle's
+            // current coordinates and re-editable.
+            const Text('Ubicación exacta en el mapa *', style: TextStyle(color: Colors.black54, fontSize: 12)),
+            const SizedBox(height: 6),
+            GestureDetector(
+              onTap: _openLocationPicker,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: _pickedLocation == null ? Colors.grey.shade300 : kCyan),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.map_outlined, color: _pickedLocation == null ? Colors.grey[500] : kCyan),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _pickedLocation == null
+                            ? 'Toca para marcar la ubicación en el mapa (obligatorio)'
+                            : 'Ubicación marcada: ${_pickedLocation!.latitude.toStringAsFixed(5)}, ${_pickedLocation!.longitude.toStringAsFixed(5)}',
+                        style: TextStyle(color: _pickedLocation == null ? Colors.grey[500] : Colors.black87, fontSize: 13),
+                      ),
+                    ),
+                    Icon(Icons.chevron_right, color: Colors.grey[400]),
+                  ],
+                ),
+              ),
+            ),
             const SizedBox(height: 14),
 
             const Text('Categoría', style: TextStyle(color: Colors.black54, fontSize: 12)),

@@ -122,7 +122,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   Future<void> _openChatWithRenter(ReservationData reservation) async {
     if (!mounted) return;
     context.push('/chat', extra: {
-      'name': 'Cliente #${reservation.renterId}',
+      'name': reservation.renterDisplayName,
       'car': 'Reserva ${reservation.reservationCode}',
       'isOnline': false,
       'ownerId': _myId,
@@ -446,7 +446,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                       ),
                     ),
                     Text(
-                      'Cliente #${reservation.renterId}',
+                      reservation.renterDisplayName,
                       style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
                     ),
                     Text(
@@ -594,7 +594,21 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Cliente #${reservation.renterId}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black)),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            reservation.renterDisplayName,
+                            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (reservation.renter?.kycVerified == true) ...[
+                          const SizedBox(width: 4),
+                          const Icon(Icons.verified, size: 14, color: kCyan),
+                        ],
+                      ],
+                    ),
                     Text('${reservation.startDate} → ${reservation.endDate}', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
                   ],
                 ),

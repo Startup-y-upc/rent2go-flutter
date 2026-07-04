@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:latlong2/latlong.dart';
 import '../models/vehicle_models.dart';
 import '../services/vehicle_service.dart';
 import '../widgets/common_widgets.dart';
+import 'location_picker_screen.dart';
 
 class AddVehicleScreen extends StatefulWidget {
   const AddVehicleScreen({super.key});
@@ -33,6 +35,9 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
   String? _imageFilename;
   final _picker = ImagePicker();
 
+  // US65 — required map-picked location; no manual lat/lon fields.
+  LatLng? _pickedLocation;
+
   bool _loadingCategories = true;
   bool _saving = false;
   String? _errorMsg;
@@ -61,6 +66,16 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
     });
   }
 
+  Future<void> _openLocationPicker() async {
+    final picked = await showLocationPicker(context, initialLocation: _pickedLocation);
+    if (picked != null) {
+      setState(() {
+        _pickedLocation = picked;
+        _errorMsg = null;
+      });
+    }
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     if (_imageBytes == null) {
@@ -77,6 +92,12 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
     }
     if (_fuelType == null) {
       setState(() => _errorMsg = 'Selecciona el tipo de combustible');
+      return;
+    }
+    // US65 — a real map-picked location is required, mirroring the existing
+    // category/transmission/fuel required-field validation pattern above.
+    if (_pickedLocation == null) {
+      setState(() => _errorMsg = 'Marca la ubicación del vehículo en el mapa');
       return;
     }
 
@@ -99,6 +120,8 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
         seats: _seatsCtrl.text.trim().isNotEmpty ? int.parse(_seatsCtrl.text.trim()) : null,
         transmission: _transmission!,
         fuelType: _fuelType!,
+        latitude: _pickedLocation!.latitude,
+        longitude: _pickedLocation!.longitude,
         imageBytes: _imageBytes!,
         imageFilename: _imageFilename ?? 'vehicle.jpg',
       );
@@ -225,6 +248,39 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
             ),
             const SizedBox(height: 14),
             _Field(label: 'Ubicación', controller: _locationCtrl, hint: 'Madrid, España'),
+            const SizedBox(height: 14),
+
+            // US65 — required map-picked location (lat/lon), separate from the free-text
+            // address field above. Communicates clearly that this step is mandatory,
+            // consistent with the form's other required-field validation.
+            const Text('Ubicación exacta en el mapa *', style: TextStyle(color: Colors.black54, fontSize: 12)),
+            const SizedBox(height: 6),
+            GestureDetector(
+              onTap: _openLocationPicker,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: _pickedLocation == null ? Colors.grey.shade300 : kCyan),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.map_outlined, color: _pickedLocation == null ? Colors.grey[500] : kCyan),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _pickedLocation == null
+                            ? 'Toca para marcar la ubicación en el mapa (obligatorio)'
+                            : 'Ubicación marcada: ${_pickedLocation!.latitude.toStringAsFixed(5)}, ${_pickedLocation!.longitude.toStringAsFixed(5)}',
+                        style: TextStyle(color: _pickedLocation == null ? Colors.grey[500] : Colors.black87, fontSize: 13),
+                      ),
+                    ),
+                    Icon(Icons.chevron_right, color: Colors.grey[400]),
+                  ],
+                ),
+              ),
+            ),
             const SizedBox(height: 14),
 
             // Categoría

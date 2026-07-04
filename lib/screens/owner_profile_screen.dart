@@ -419,6 +419,17 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
                           const Text('Confianza y verificación', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black)),
                           const Spacer(),
                           Text('$verifiedCount / 4', style: TextStyle(color: verifiedCount == 4 ? kCyan : Colors.grey[500], fontWeight: FontWeight.bold)),
+                          // US61 — header-level refresh, since verification state can change
+                          // server-side (e.g. after clicking an email link) without the app
+                          // knowing; re-fetches /auth/me to update all 4 badges at once.
+                          IconButton(
+                            icon: const Icon(Icons.refresh, size: 18, color: Colors.grey),
+                            tooltip: 'Actualizar estado de verificación',
+                            onPressed: _loadUser,
+                            constraints: const BoxConstraints(),
+                            padding: const EdgeInsets.only(left: 6),
+                            visualDensity: VisualDensity.compact,
+                          ),
                         ],
                       ),
                       const SizedBox(height: 4),
@@ -435,11 +446,13 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
                       // email verification link AND refreshes /auth/me so both badges reflect
                       // the current true state. Phone has no independent OTP/SMS action — its
                       // badge is purely recomputed from the refreshed phone value on file.
+                      // US61 — action only shown while genuinely unverified, matching the
+                      // KYC row's already-correct pattern above (no "Reverificar" once verified).
                       _VerifyRow(
                         label: 'Correo verificado',
                         verified: emailVerified,
-                        action: _resendingVerification ? 'Enviando...' : 'Reverificar',
-                        onAction: _resendingVerification ? null : _reverifyEmailAndPhone,
+                        action: emailVerified ? null : (_resendingVerification ? 'Enviando...' : 'Reverificar'),
+                        onAction: emailVerified ? null : (_resendingVerification ? null : _reverifyEmailAndPhone),
                       ),
                       // Fix 2 — paste-code alternative to a clickable magic link.
                       if (!emailVerified)
@@ -453,11 +466,14 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
                             ),
                           ),
                         ),
+                      // US61 — phone verification is format-only (no SMS/OTP, per prior sprint
+                      // constraint); there is no resend/reverify action that makes sense here,
+                      // so the action is dropped entirely rather than conditionally shown.
                       _VerifyRow(
                         label: 'Teléfono verificado',
                         verified: phoneVerified,
-                        action: _resendingVerification ? 'Enviando...' : 'Reverificar',
-                        onAction: _resendingVerification ? null : _reverifyEmailAndPhone,
+                        action: null,
+                        onAction: null,
                       ),
                       _VerifyRow(
                         label: 'Foto de perfil',

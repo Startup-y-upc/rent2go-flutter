@@ -6,6 +6,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../models/vehicle_models.dart';
 import '../services/vehicle_service.dart';
 import '../widgets/common_widgets.dart';
+import '../widgets/vehicle_filter_sheet.dart';
 
 class ExploreScreen extends StatefulWidget {
   const ExploreScreen({super.key});
@@ -22,6 +23,11 @@ class _ExploreScreenState extends State<ExploreScreen> {
   bool _loading = true;
   String? _errorMsg;
 
+  // US63/TS19 — structured filters + geo-radius search state.
+  VehicleFilters _filters = const VehicleFilters();
+  LatLng? _radiusCenter;
+  double _radiusKm = 10;
+
   @override
   void initState() {
     super.initState();
@@ -34,12 +40,50 @@ class _ExploreScreenState extends State<ExploreScreen> {
       _errorMsg = null;
     });
     try {
-      final vehicles = await VehicleService.getAvailableVehicles();
+      final vehicles = await VehicleService.getAvailableVehicles(
+        minPrice: _filters.minPrice,
+        maxPrice: _filters.maxPrice,
+        seats: _filters.seats,
+        transmission: _filters.transmission,
+        fuelType: _filters.fuelType,
+        centerLatitude: _filters.centerLatitude,
+        centerLongitude: _filters.centerLongitude,
+        radiusKm: _filters.radiusKm,
+      );
       // Solo mostramos vehículos con coordenadas válidas en el mapa.
       if (mounted) setState(() { _vehicles = vehicles; _loading = false; });
     } catch (e) {
       if (mounted) setState(() { _loading = false; _errorMsg = 'No se pudieron cargar los vehículos.'; });
     }
+  }
+
+  Future<void> _openFilterSheet() async {
+    final result = await showVehicleFilterSheet(context, initialFilters: _filters);
+    if (result != null) {
+      setState(() => _filters = result);
+      _load();
+    }
+  }
+
+  void _applyRadiusSearch() {
+    final center = _radiusCenter;
+    if (center == null) return;
+    setState(() {
+      _filters = _filters.copyWith(
+        centerLatitude: center.latitude,
+        centerLongitude: center.longitude,
+        radiusKm: _radiusKm,
+      );
+    });
+    _load();
+  }
+
+  void _clearRadiusSearch() {
+    setState(() {
+      _radiusCenter = null;
+      _filters = _filters.copyWith(clearRadius: true);
+    });
+    _load();
   }
 
   void _goToBottomNav(int i) {
@@ -84,41 +128,81 @@ class _ExploreScreenState extends State<ExploreScreen> {
             bottom: 290,
             child: FlutterMap(
               mapController: _mapController,
-              options: const MapOptions(initialCenter: _madridCenter, initialZoom: 13),
+              options: MapOptions(
+                initialCenter: _madridCenter,
+                initialZoom: 13,
+                // TS19 — long press drops a search pin for geo-radius search, same
+                // centerLatitude/centerLongitude/radiusKm params Kotlin's map uses.
+                onLongPress: (_, point) => setState(() => _radiusCenter = point),
+              ),
               children: [
                 TileLayer(
                   urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                   userAgentPackageName: 'com.rent2go.app',
                 ),
                 MarkerLayer(
-                  markers: _vehicles.asMap().entries.map((e) {
-                    final selected = _selectedIndex == e.key;
-                    return Marker(
-                      point: _locationOf(e.value),
-                      width: selected ? 90 : 75,
-                      height: 40,
-                      child: GestureDetector(
-                        onTap: () => setState(() => _selectedIndex = e.key),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: selected ? kCyan : Colors.black,
-                            borderRadius: BorderRadius.circular(20),
-                            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 6, offset: const Offset(0, 2))],
-                          ),
-                          child: Text(
-                            '${e.value.dailyPrice.toInt()}€/día',
-                            style: TextStyle(color: selected ? Colors.black : Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                  markers: [
+                    ..._vehicles.asMap().entries.map((e) {
+                      final selected = _selectedIndex == e.key;
+                      return Marker(
+                        point: _locationOf(e.value),
+                        width: selected ? 90 : 75,
+                        height: 40,
+                        child: GestureDetector(
+                          onTap: () => setState(() => _selectedIndex = e.key),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: selected ? kCyan : Colors.black,
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 6, offset: const Offset(0, 2))],
+                            ),
+                            child: Text(
+                              '${e.value.dailyPrice.toInt()}€/día',
+                              style: TextStyle(color: selected ? Colors.black : Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                            ),
                           ),
                         ),
+                      );
+                    }),
+                    if (_radiusCenter != null)
+                      Marker(
+                        point: _radiusCenter!,
+                        width: 40,
+                        height: 40,
+                        child: const Icon(Icons.location_pin, color: Colors.redAccent, size: 36),
                       ),
-                    );
-                  }).toList(),
+                  ],
                 ),
               ],
             ),
           ),
+
+          if (_radiusCenter == null)
+            const Positioned(
+              bottom: 300,
+              left: 16,
+              right: 16,
+              child: IgnorePointer(
+                child: Center(
+                  child: _MapHint(text: 'Mantén presionado el mapa para buscar por zona'),
+                ),
+              ),
+            ),
+
+          if (_radiusCenter != null)
+            Positioned(
+              bottom: 300,
+              left: 16,
+              right: 16,
+              child: _RadiusControl(
+                radiusKm: _radiusKm,
+                onRadiusChanged: (v) => setState(() => _radiusKm = v),
+                onSearch: _applyRadiusSearch,
+                onClear: _clearRadiusSearch,
+              ),
+            ),
 
           Positioned(
             top: 48, left: 16, right: 16,
@@ -142,7 +226,25 @@ class _ExploreScreenState extends State<ExploreScreen> {
                       ],
                     ),
                   ),
-                  const Icon(Icons.tune, color: Colors.grey, size: 20),
+                  // US63 — was a dead, non-interactive icon; now opens the filter sheet
+                  // and shows a filled badge when filters are active.
+                  GestureDetector(
+                    onTap: _openFilterSheet,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Icon(Icons.tune, color: _filters.isEmpty ? Colors.grey : kCyan, size: 20),
+                        if (!_filters.isEmpty)
+                          Positioned(
+                            right: -2, top: -2,
+                            child: Container(
+                              width: 8, height: 8,
+                              decoration: const BoxDecoration(color: kCyan, shape: BoxShape.circle),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -398,6 +500,66 @@ class BottomNavBar extends StatelessWidget {
             );
           }).toList(),
         ),
+      ),
+    );
+  }
+}
+
+class _MapHint extends StatelessWidget {
+  final String text;
+  const _MapHint({required this.text});
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    decoration: BoxDecoration(color: Colors.black.withOpacity(0.6), borderRadius: BorderRadius.circular(8)),
+    child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 11), textAlign: TextAlign.center),
+  );
+}
+
+class _RadiusControl extends StatelessWidget {
+  final double radiusKm;
+  final ValueChanged<double> onRadiusChanged;
+  final VoidCallback onSearch;
+  final VoidCallback onClear;
+  const _RadiusControl({
+    required this.radiusKm,
+    required this.onRadiusChanged,
+    required this.onSearch,
+    required this.onClear,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.12), blurRadius: 10)],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Radio de búsqueda: ${radiusKm.toInt()} km', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black)),
+          Slider(
+            value: radiusKm,
+            min: 1, max: 50,
+            activeColor: kCyan,
+            onChanged: onRadiusChanged,
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton(onPressed: onClear, child: const Text('Quitar zona')),
+              const SizedBox(width: 8),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: kCyan, foregroundColor: Colors.black),
+                onPressed: onSearch,
+                child: const Text('Buscar en esta zona'),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

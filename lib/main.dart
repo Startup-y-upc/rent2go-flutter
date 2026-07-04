@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_stripe/flutter_stripe.dart';
 
 import 'screens/login_screen.dart';
 import 'screens/register_screen.dart';
@@ -27,6 +28,11 @@ import 'screens/terms_screen.dart';
 import 'services/auth_service.dart';
 import 'models/vehicle_models.dart';
 
+const String kStripePublishableKey = String.fromEnvironment(
+  'STRIPE_PUBLISHABLE_KEY',
+  defaultValue: 'pk_test_51000000000000000000000000000000000000000000000000000000000000',
+);
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
@@ -34,6 +40,8 @@ void main() async {
   await Hive.openBox('user_docs');
   await Hive.openBox('user_profile');
   await Hive.openBox('conversations_map');
+  Stripe.publishableKey = kStripePublishableKey;
+  await Stripe.instance.applySettings();
   runApp(const Rent2GoApp());
 }
 

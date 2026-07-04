@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'auth_service.dart';
+import '../models/counterparty_data.dart';
 
 /// ReservationResource exacto devuelto por el backend
 /// (ReservationController.java — campos verificados directamente).
@@ -22,6 +23,10 @@ class ReservationData {
   final List<String> pickupPhotos;
   final List<String> returnPhotos;
   final String? damageReport;
+  // TS18/US60 — nested counterparty objects (real name + KYC status), additive
+  // alongside renterId/ownerId. Null when the backend hasn't sent them yet.
+  final CounterpartyData? renter;
+  final CounterpartyData? owner;
 
   ReservationData({
     required this.id,
@@ -41,7 +46,14 @@ class ReservationData {
     required this.pickupPhotos,
     required this.returnPhotos,
     this.damageReport,
+    this.renter,
+    this.owner,
   });
+
+  /// Nombre a mostrar del arrendatario: nombre real si el backend lo envió,
+  /// fallback explícito con el ID (nunca solo el ID sin contexto) — US60 AC3.
+  String get renterDisplayName => renter?.fullName ?? 'Cliente #$renterId';
+  String get ownerDisplayName => owner?.fullName ?? 'Propietario #$ownerId';
 
   factory ReservationData.fromJson(Map<String, dynamic> json) {
     return ReservationData(
@@ -62,6 +74,8 @@ class ReservationData {
       pickupPhotos: (json['pickupPhotos'] as List?)?.map((e) => e.toString()).toList() ?? [],
       returnPhotos: (json['returnPhotos'] as List?)?.map((e) => e.toString()).toList() ?? [],
       damageReport: json['damageReport']?.toString(),
+      renter: CounterpartyData.tryParse(json['renter']),
+      owner: CounterpartyData.tryParse(json['owner']),
     );
   }
 }

@@ -53,7 +53,7 @@ class _OwnerMessagesScreenState extends State<OwnerMessagesScreen> {
     if (_myUserId == null) return;
     final iAmOwner = c.ownerId == _myUserId;
     context.push('/chat', extra: {
-      'name': iAmOwner ? 'Arrendatario #${c.renterId}' : 'Propietario #${c.ownerId}',
+      'name': iAmOwner ? c.renterDisplayName : c.ownerDisplayName,
       'car': c.subject,
       'isOnline': false,
       'ownerId': c.ownerId,
@@ -142,7 +142,7 @@ class _OwnerMessagesScreenState extends State<OwnerMessagesScreen> {
                                 itemBuilder: (_, i) {
                                   final c = _filtered[i];
                                   final iAmOwner = c.ownerId == _myUserId;
-                                  final otherLabel = iAmOwner ? 'Arrendatario #${c.renterId}' : 'Propietario #${c.ownerId}';
+                                  final otherLabel = iAmOwner ? c.renterDisplayName : c.ownerDisplayName;
                                   return ListTile(
                                     contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                                     leading: CircleAvatar(

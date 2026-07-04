@@ -107,9 +107,35 @@ class VehicleService {
   }
 
   /// GET /api/v1/vehicles — búsqueda de vehículos disponibles (paginado)
-  /// Usado por la vista de arrendatario para mostrar el catálogo real
-  static Future<List<VehicleData>> getAvailableVehicles({int page = 0, int size = 50}) async {
-    final uri = Uri.parse('$baseUrl/vehicles?page=$page&size=$size');
+  /// Usado por la vista de arrendatario para mostrar el catálogo real.
+  /// US63/TS19: acepta filtros estructurados (precio/asientos/transmisión/combustible)
+  /// y búsqueda por radio geográfico — mismos query params que ya acepta el backend
+  /// (VehicleController.searchAvailableVehicles) y que Kotlin ya usa.
+  static Future<List<VehicleData>> getAvailableVehicles({
+    int page = 0,
+    int size = 50,
+    double? minPrice,
+    double? maxPrice,
+    int? seats,
+    String? transmission,
+    String? fuelType,
+    double? centerLatitude,
+    double? centerLongitude,
+    double? radiusKm,
+  }) async {
+    final queryParams = <String, String>{
+      'page': page.toString(),
+      'size': size.toString(),
+      if (minPrice != null) 'minPrice': minPrice.toString(),
+      if (maxPrice != null) 'maxPrice': maxPrice.toString(),
+      if (seats != null) 'seats': seats.toString(),
+      if (transmission != null && transmission.isNotEmpty) 'transmission': transmission,
+      if (fuelType != null && fuelType.isNotEmpty) 'fuelType': fuelType,
+      if (centerLatitude != null) 'centerLatitude': centerLatitude.toString(),
+      if (centerLongitude != null) 'centerLongitude': centerLongitude.toString(),
+      if (radiusKm != null) 'radiusKm': radiusKm.toString(),
+    };
+    final uri = Uri.parse('$baseUrl/vehicles').replace(queryParameters: queryParams);
     final response = await http.get(uri);
 
     if (response.statusCode == 200) {
@@ -168,8 +194,11 @@ class VehicleService {
         'transmission': transmission,
         'fuelType': fuelType,
         'features': features ?? [],
-        'latitude': latitude ?? 0,
-        'longitude': longitude ?? 0,
+        // US65 fix: omit lat/lon when not provided instead of defaulting to 0.0
+        // (the Gulf of Guinea) — the backend treats these fields as optional
+        // (RegisterVehicleWithImageResource has no @NotNull on them).
+        if (latitude != null) 'latitude': latitude,
+        if (longitude != null) 'longitude': longitude,
       }),
     );
 

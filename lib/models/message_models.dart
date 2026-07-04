@@ -1,3 +1,5 @@
+import 'counterparty_data.dart';
+
 class ConversationData {
   final int id;
   final int ownerId;
@@ -10,6 +12,9 @@ class ConversationData {
   final String? lastMessagePreview;
   final String createdAt;
   final String updatedAt;
+  // TS18/US60 — nested counterparty objects, additive alongside ownerId/renterId.
+  final CounterpartyData? owner;
+  final CounterpartyData? renter;
 
   ConversationData({
     required this.id,
@@ -23,7 +28,14 @@ class ConversationData {
     this.lastMessagePreview,
     required this.createdAt,
     required this.updatedAt,
+    this.owner,
+    this.renter,
   });
+
+  /// Nombre a mostrar de la contraparte: nombre real si el backend lo envió,
+  /// fallback explícito con el ID (nunca solo el ID sin contexto) — US60 AC3.
+  String get ownerDisplayName => owner?.fullName ?? 'Propietario #$ownerId';
+  String get renterDisplayName => renter?.fullName ?? 'Arrendatario #$renterId';
 
   factory ConversationData.fromJson(Map<String, dynamic> json) {
     return ConversationData(
@@ -38,6 +50,8 @@ class ConversationData {
       lastMessagePreview: json['lastMessagePreview'],
       createdAt: json['createdAt'] ?? '',
       updatedAt: json['updatedAt'] ?? '',
+      owner: CounterpartyData.tryParse(json['owner']),
+      renter: CounterpartyData.tryParse(json['renter']),
     );
   }
 }
