@@ -453,7 +453,7 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
                         ],
                       ),
                     ),
-                    Text(e.value.dailyRateUsd == 0 ? r'$0' : 'S/ ${e.value.dailyRateUsd.toStringAsFixed(2)}/día', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black)),
+                    Text(e.value.dailyRateUsd == 0 ? r'S/ 0' : 'S/ ${e.value.dailyRateUsd.toStringAsFixed(2)}/día', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black)),
                   ],
                 ),
               ),
