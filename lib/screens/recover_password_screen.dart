@@ -198,9 +198,9 @@ class _RecoverPasswordScreenState extends State<RecoverPasswordScreen> {
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: kCyan.withOpacity(0.08),
+                color: kCyan.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: kCyan.withOpacity(0.3)),
+                border: Border.all(color: kCyan.withValues(alpha: 0.3)),
               ),
               child: Row(
                 children: [
@@ -290,9 +290,9 @@ class _ErrorBanner extends StatelessWidget {
     width: double.infinity,
     padding: const EdgeInsets.all(12),
     decoration: BoxDecoration(
-      color: Colors.red.withOpacity(0.1),
+      color: Colors.red.withValues(alpha: 0.1),
       borderRadius: BorderRadius.circular(8),
-      border: Border.all(color: Colors.redAccent.withOpacity(0.4)),
+      border: Border.all(color: Colors.redAccent.withValues(alpha: 0.4)),
     ),
     child: Row(
       children: [

@@ -7,7 +7,6 @@ import '../models/vehicle_models.dart';
 import '../services/auth_service.dart';
 import '../services/vehicle_service.dart';
 import '../widgets/common_widgets.dart';
-import 'validate_account_screen.dart';
 
 class OwnerProfileScreen extends StatefulWidget {
   final VoidCallback onNavigateToEarnings;
@@ -395,12 +394,12 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
                     child: Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.grey.shade200)),
-                      child: Row(
+                      child: const Row(
                         children: [
-                          const Icon(Icons.attach_money, color: kCyan),
-                          const SizedBox(width: 12),
-                          const Expanded(child: Text('Ver mis ganancias', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.black))),
-                          const Icon(Icons.chevron_right, color: Colors.grey),
+                          Icon(Icons.attach_money, color: kCyan),
+                          SizedBox(width: 12),
+                          Expanded(child: Text('Ver mis ganancias', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.black))),
+                          Icon(Icons.chevron_right, color: Colors.grey),
                         ],
                       ),
                     ),
@@ -509,7 +508,7 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
                           width: double.infinity,
                           padding: const EdgeInsets.all(10),
                           margin: const EdgeInsets.only(bottom: 12),
-                          decoration: BoxDecoration(color: Colors.red.withOpacity(0.08), borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.redAccent.withOpacity(0.3))),
+                          decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3))),
                           child: Text(_errorMsg!, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
                         ),
                       ],
@@ -611,7 +610,7 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
                         onTap: () => context.push('/terms'),
                       ),
                       const Divider(height: 1),
-                      _OptionRow(icon: Icons.help_outline, label: 'Ayuda'),
+                      const _OptionRow(icon: Icons.help_outline, label: 'Ayuda'),
                       const Divider(height: 1),
                       _OptionRow(
                         icon: Icons.logout, label: 'Cerrar sesión', color: Colors.red,

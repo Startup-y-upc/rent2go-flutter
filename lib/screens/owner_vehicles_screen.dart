@@ -17,7 +17,6 @@ class _OwnerVehiclesScreenState extends State<OwnerVehiclesScreen> {
   List<VehicleData> _vehicles = [];
   bool _loading = true;
   String? _errorMsg;
-  int _filter = 0; // 0=Todos 1=Activos 2=Borradores 3=Revisión
 
   @override
   void initState() {
@@ -38,14 +37,11 @@ class _OwnerVehiclesScreenState extends State<OwnerVehiclesScreen> {
     }
   }
 
-  List<VehicleData> get _filtered {
-    if (_filter == 1) return _vehicles.where((v) {
+  List<VehicleData> get _activeVehicles {
+    return _vehicles.where((v) {
       final s = v.status.toUpperCase();
       return s == 'ACTIVE' || s == 'AVAILABLE';
     }).toList();
-    if (_filter == 2) return _vehicles.where((v) => v.status.toUpperCase() == 'DRAFT').toList();
-    if (_filter == 3) return _vehicles.where((v) => v.status.toUpperCase() == 'PENDING_REVIEW').toList();
-    return _vehicles;
   }
 
   Future<void> _goToEdit(VehicleData vehicle) async {
@@ -125,12 +121,12 @@ class _OwnerVehiclesScreenState extends State<OwnerVehiclesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final activeCount = _vehicles.where((v) => v.status.toUpperCase() == 'ACTIVE').length;
+    final activeCount = _activeVehicles.length;
     return Scaffold(
       backgroundColor: const Color(0xFFD9E5E3),
       body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _load,
+        child: DefaultTabController(
+          length: 2,
           child: Column(
             children: [
               Padding(
@@ -146,7 +142,7 @@ class _OwnerVehiclesScreenState extends State<OwnerVehiclesScreen> {
                           const SizedBox(height: 2),
                           Text(
                             '${_vehicles.length} publicados · $activeCount en alquiler ahora',
-                            style: TextStyle(color: Colors.black54, fontSize: 12),
+                            style: const TextStyle(color: Colors.black54, fontSize: 12),
                           ),
                         ],
                       ),
@@ -163,78 +159,112 @@ class _OwnerVehiclesScreenState extends State<OwnerVehiclesScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Row(
-                  children: ['Todos', 'Activos', 'Borradores', 'Revisión'].asMap().entries.map((e) => Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: GestureDetector(
-                      onTap: () => setState(() => _filter = e.key),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: _filter == e.key ? Colors.black : Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(e.value, style: TextStyle(
-                            fontSize: 13, fontWeight: FontWeight.w600,
-                            color: _filter == e.key ? Colors.white : Colors.grey[600])),
-                      ),
-                    ),
-                  )).toList(),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20),
+                child: TabBar(
+                  labelColor: Colors.white,
+                  unselectedLabelColor: Colors.black54,
+                  indicator: BoxDecoration(
+                    color: Colors.black,
+                    borderRadius: BorderRadius.all(Radius.circular(20)),
+                  ),
+                  dividerColor: Colors.transparent,
+                  indicatorSize: TabBarIndicatorSize.tab,
+                  tabs: [
+                    Tab(text: 'Todos'),
+                    Tab(text: 'Activos'),
+                  ],
                 ),
               ),
               const SizedBox(height: 16),
               Expanded(
-                child: _loading
-                    ? const Center(child: CircularProgressIndicator(color: kCyan))
-                    : _errorMsg != null
-                        ? Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(_errorMsg!, style: TextStyle(color: Colors.grey[600])),
-                                const SizedBox(height: 8),
-                                TextButton(onPressed: _load, child: const Text('Reintentar')),
-                              ],
-                            ),
-                          )
-                        : _filtered.isEmpty
-                            ? Center(
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.directions_car_outlined, size: 48, color: Colors.black26),
-                                    const SizedBox(height: 12),
-                                    Text('Aún no tienes vehículos aquí',
-                                        style: TextStyle(color: Colors.black54)),
-                                    const SizedBox(height: 12),
-                                    ElevatedButton.icon(
-                                      onPressed: _goToAdd,
-                                      icon: const Icon(Icons.add),
-                                      label: const Text('Publicar vehículo'),
-                                      style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.black, foregroundColor: Colors.white),
-                                    ),
-                                  ],
-                                ),
-                              )
-                            : ListView.separated(
-                                padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
-                                itemCount: _filtered.length,
-                                separatorBuilder: (_, __) => const SizedBox(height: 16),
-                                itemBuilder: (_, i) => _VehicleCard(
-                                  vehicle: _filtered[i],
-                                  onTap: () => _goToEdit(_filtered[i]),
-                                  onPause: () => _togglePause(_filtered[i]),
-                                  onDelete: () => _confirmDelete(_filtered[i]),
-                                  onAvailability: () => _goToAvailability(_filtered[i]),
-                                ),
-                              ),
+                child: TabBarView(
+                  children: [
+                    _buildVehicleList(
+                      vehicles: _vehicles,
+                      emptyMessage: 'Aún no tienes vehículos aquí',
+                    ),
+                    _buildVehicleList(
+                      vehicles: _activeVehicles,
+                      emptyMessage: 'No tienes vehículos activos',
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVehicleList({
+    required List<VehicleData> vehicles,
+    required String emptyMessage,
+  }) {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator(color: kCyan));
+    }
+
+    if (_errorMsg != null) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(_errorMsg!, style: TextStyle(color: Colors.grey[600])),
+            const SizedBox(height: 8),
+            TextButton(onPressed: _load, child: const Text('Reintentar')),
+          ],
+        ),
+      );
+    }
+
+    if (vehicles.isEmpty) {
+      return RefreshIndicator(
+        onRefresh: _load,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+          children: [
+            const SizedBox(height: 80),
+            Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.directions_car_outlined, size: 48, color: Colors.black26),
+                  const SizedBox(height: 12),
+                  Text(emptyMessage, style: const TextStyle(color: Colors.black54)),
+                  const SizedBox(height: 12),
+                  ElevatedButton.icon(
+                    onPressed: _goToAdd,
+                    icon: const Icon(Icons.add),
+                    label: const Text('Publicar vehículo'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.black,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView.separated(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+        itemCount: vehicles.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 16),
+        itemBuilder: (_, i) => _VehicleCard(
+          vehicle: vehicles[i],
+          onTap: () => _goToEdit(vehicles[i]),
+          onPause: () => _togglePause(vehicles[i]),
+          onDelete: () => _confirmDelete(vehicles[i]),
+          onAvailability: () => _goToAvailability(vehicles[i]),
         ),
       ),
     );
@@ -288,7 +318,7 @@ class _VehicleCard extends StatelessWidget {
           Row(children: [
             Container(width: 6, height: 6, decoration: BoxDecoration(color: _statusColor, shape: BoxShape.circle)),
             const SizedBox(width: 6),
-            Expanded(child: Text(_statusLabel, style: TextStyle(color: Colors.black54, fontSize: 12))),
+            Expanded(child: Text(_statusLabel, style: const TextStyle(color: Colors.black54, fontSize: 12))),
             PopupMenuButton<String>(
               key: Key('vehicle_actions_menu_${vehicle.id}'),
               icon: const Icon(Icons.more_vert, size: 20, color: Colors.black54),
@@ -338,7 +368,7 @@ class _VehicleCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(vehicle.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black)),
-                    Text(vehicle.licensePlate, style: TextStyle(color: Colors.black54, fontSize: 12)),
+                    Text(vehicle.licensePlate, style: const TextStyle(color: Colors.black54, fontSize: 12)),
                   ],
                 ),
               ),
@@ -364,12 +394,12 @@ class _VehicleCard extends StatelessWidget {
               Row(children: [
                 const Icon(Icons.local_gas_station_outlined, size: 13, color: Colors.black45),
                 const SizedBox(width: 4),
-                Text(vehicle.fuelType ?? '—', style: TextStyle(color: Colors.black45, fontSize: 11)),
+                Text(vehicle.fuelType ?? '—', style: const TextStyle(color: Colors.black45, fontSize: 11)),
               ]),
               Row(children: [
                 const Icon(Icons.settings_outlined, size: 13, color: Colors.black45),
                 const SizedBox(width: 4),
-                Text(vehicle.transmission ?? '—', style: TextStyle(color: Colors.black45, fontSize: 11)),
+                Text(vehicle.transmission ?? '—', style: const TextStyle(color: Colors.black45, fontSize: 11)),
               ]),
             ],
           ),
@@ -387,7 +417,7 @@ class _StatChip extends StatelessWidget {
   Widget build(BuildContext context) => Column(
     children: [
       Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black)),
-      Text(label, style: TextStyle(color: Colors.black45, fontSize: 11)),
+      Text(label, style: const TextStyle(color: Colors.black45, fontSize: 11)),
     ],
   );
 }

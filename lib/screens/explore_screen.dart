@@ -156,7 +156,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                             decoration: BoxDecoration(
                               color: selected ? kCyan : Colors.black,
                               borderRadius: BorderRadius.circular(20),
-                              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 6, offset: const Offset(0, 2))],
+                              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 6, offset: const Offset(0, 2))],
                             ),
                             child: Text(
                               'S/ ${e.value.dailyPrice.toInt()}/día',
@@ -211,7 +211,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(12),
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.12), blurRadius: 10)],
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 10)],
               ),
               child: Row(
                 children: [
@@ -274,7 +274,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                         if (_vehicles.isNotEmpty)
                           GestureDetector(
                             onTap: _openAllVehicles,
-                            child: Text('Ver todos', style: TextStyle(color: kCyan, fontSize: 13, fontWeight: FontWeight.w500)),
+                            child: const Text('Ver todos', style: TextStyle(color: kCyan, fontSize: 13, fontWeight: FontWeight.w500)),
                           ),
                       ],
                     ),
@@ -411,7 +411,7 @@ class _CarCard extends StatelessWidget {
           color: Colors.white,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: selected ? kCyan : Colors.grey.shade200, width: selected ? 2 : 1),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 8, offset: const Offset(0, 2))],
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 8, offset: const Offset(0, 2))],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -511,7 +511,7 @@ class _MapHint extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-    decoration: BoxDecoration(color: Colors.black.withOpacity(0.6), borderRadius: BorderRadius.circular(8)),
+    decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.6), borderRadius: BorderRadius.circular(8)),
     child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 11), textAlign: TextAlign.center),
   );
 }
@@ -535,7 +535,7 @@ class _RadiusControl extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.12), blurRadius: 10)],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 10)],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

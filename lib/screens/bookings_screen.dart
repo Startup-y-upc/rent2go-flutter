@@ -228,7 +228,7 @@ class _ActiveBookingCard extends StatelessWidget {
               children: [
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(color: kCyan.withOpacity(0.2), borderRadius: BorderRadius.circular(20)),
+                  decoration: BoxDecoration(color: kCyan.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(20)),
                   child: Row(children: [
                     Container(width: 6, height: 6, decoration: const BoxDecoration(color: kCyan, shape: BoxShape.circle)),
                     const SizedBox(width: 6),

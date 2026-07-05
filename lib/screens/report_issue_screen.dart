@@ -140,7 +140,7 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
                 label: Text(c['label']!),
                 selected: selected,
                 onSelected: (_) => setState(() => _category = c['code']!),
-                selectedColor: kCyan.withOpacity(0.2),
+                selectedColor: kCyan.withValues(alpha: 0.2),
                 labelStyle: TextStyle(color: selected ? Colors.black : Colors.grey.shade700, fontWeight: selected ? FontWeight.bold : FontWeight.normal),
               );
             }).toList(),

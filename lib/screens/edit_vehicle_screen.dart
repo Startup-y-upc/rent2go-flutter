@@ -209,7 +209,7 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(color: Colors.red.withOpacity(0.08), borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.redAccent.withOpacity(0.3))),
+                decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3))),
                 child: Text(_errorMsg!, style: const TextStyle(color: Colors.redAccent, fontSize: 13)),
               ),
             ],
@@ -283,7 +283,7 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
             _loadingCategories
                 ? const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: LinearProgressIndicator())
                 : DropdownButtonFormField<int>(
-                    value: _categoryId,
+                    initialValue: _categoryId,
                     items: _categories.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name))).toList(),
                     onChanged: (v) => setState(() => _categoryId = v),
                     decoration: _dropdownDecoration(),
@@ -298,7 +298,7 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
                     const Text('Transmisión', style: TextStyle(color: Colors.black54, fontSize: 12)),
                     const SizedBox(height: 6),
                     DropdownButtonFormField<String>(
-                      value: _transmission,
+                      initialValue: _transmission,
                       items: _transmissions.map((t) => DropdownMenuItem(value: t, child: Text(t == 'MANUAL' ? 'Manual' : 'Automática'))).toList(),
                       onChanged: (v) => setState(() => _transmission = v),
                       decoration: _dropdownDecoration(),
@@ -314,7 +314,7 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
                     const Text('Combustible', style: TextStyle(color: Colors.black54, fontSize: 12)),
                     const SizedBox(height: 6),
                     DropdownButtonFormField<String>(
-                      value: _fuelType,
+                      initialValue: _fuelType,
                       items: _fuelTypes.map((f) => DropdownMenuItem(value: f, child: Text(_fuelLabel(f)))).toList(),
                       onChanged: (v) => setState(() => _fuelType = v),
                       decoration: _dropdownDecoration(),
@@ -383,7 +383,7 @@ class _Field extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: TextStyle(color: Colors.black54, fontSize: 12)),
+        Text(label, style: const TextStyle(color: Colors.black54, fontSize: 12)),
         const SizedBox(height: 6),
         TextFormField(
           controller: controller,

@@ -181,13 +181,13 @@ class _AvailabilityScreenState extends State<AvailabilityScreen> {
                               ),
                             )
                           : _blocks.isEmpty
-                              ? Center(
-                                  key: const Key('availability_empty_state'),
+                              ? const Center(
+                                  key: Key('availability_empty_state'),
                                   child: Column(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       Icon(Icons.event_available_outlined, size: 40, color: Colors.black26),
-                                      const SizedBox(height: 8),
+                                      SizedBox(height: 8),
                                       Text('Este vehículo está disponible en todas las fechas',
                                           style: TextStyle(color: Colors.black54)),
                                     ],

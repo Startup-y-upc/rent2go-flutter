@@ -135,7 +135,7 @@ class _VehicleFilterSheetContentState extends State<_VehicleFilterSheetContent> 
               const Text('Filtrar vehículos', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black)),
               const SizedBox(height: 16),
 
-              _SectionLabel('Precio por día'),
+              const _SectionLabel('Precio por día'),
               Row(
                 children: [
                   Expanded(
@@ -157,7 +157,7 @@ class _VehicleFilterSheetContentState extends State<_VehicleFilterSheetContent> 
               ),
 
               const _SectionDivider(),
-              _SectionLabel('Asientos mínimos'),
+              const _SectionLabel('Asientos mínimos'),
               const SizedBox(height: 8),
               TextField(
                 controller: _seatsCtrl,
@@ -166,7 +166,7 @@ class _VehicleFilterSheetContentState extends State<_VehicleFilterSheetContent> 
               ),
 
               const _SectionDivider(),
-              _SectionLabel('Transmisión'),
+              const _SectionLabel('Transmisión'),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
@@ -176,14 +176,14 @@ class _VehicleFilterSheetContentState extends State<_VehicleFilterSheetContent> 
                   return ChoiceChip(
                     label: Text(option == 'MANUAL' ? 'Manual' : 'Automática'),
                     selected: selected,
-                    selectedColor: kCyan.withOpacity(0.2),
+                    selectedColor: kCyan.withValues(alpha: 0.2),
                     onSelected: (_) => setState(() => _transmission = selected ? null : option),
                   );
                 }).toList(),
               ),
 
               const _SectionDivider(),
-              _SectionLabel('Combustible'),
+              const _SectionLabel('Combustible'),
               const SizedBox(height: 8),
               // Wrap (equivalente a FlowRow en Kotlin) para que las opciones de combustible
               // salten de línea en pantallas angostas, en vez de recortarse en un Row fijo.
@@ -195,7 +195,7 @@ class _VehicleFilterSheetContentState extends State<_VehicleFilterSheetContent> 
                   return ChoiceChip(
                     label: Text(option[0] + option.substring(1).toLowerCase()),
                     selected: selected,
-                    selectedColor: kCyan.withOpacity(0.2),
+                    selectedColor: kCyan.withValues(alpha: 0.2),
                     onSelected: (_) => setState(() => _fuelType = selected ? null : option),
                   );
                 }).toList(),
@@ -257,6 +257,6 @@ class _SectionDivider extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 16),
-    child: Divider(height: 1, color: Colors.black.withOpacity(0.08)),
+    child: Divider(height: 1, color: Colors.black.withValues(alpha: 0.08)),
   );
 }

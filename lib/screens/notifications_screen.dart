@@ -166,9 +166,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             margin: const EdgeInsets.only(bottom: 10),
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: n.isRead ? Colors.white : kCyan.withOpacity(0.06),
+              color: n.isRead ? Colors.white : kCyan.withValues(alpha: 0.06),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: n.isRead ? Colors.grey.shade200 : kCyan.withOpacity(0.4)),
+              border: Border.all(color: n.isRead ? Colors.grey.shade200 : kCyan.withValues(alpha: 0.4)),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,

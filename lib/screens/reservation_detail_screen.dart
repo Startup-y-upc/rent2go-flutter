@@ -174,7 +174,7 @@ class _ReservationDetailScreenState extends State<ReservationDetailScreen> {
             const SizedBox(height: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(color: kCyan.withOpacity(0.15), borderRadius: BorderRadius.circular(20)),
+              decoration: BoxDecoration(color: kCyan.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(20)),
               child: Text(_reservation.status, style: const TextStyle(color: kCyan, fontWeight: FontWeight.bold, fontSize: 12)),
             ),
             const SizedBox(height: 20),

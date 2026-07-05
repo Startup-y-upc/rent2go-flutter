@@ -180,7 +180,7 @@ class _OwnerReservationHistoryScreenState extends State<OwnerReservationHistoryS
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -189,7 +189,7 @@ class _OwnerReservationHistoryScreenState extends State<OwnerReservationHistoryS
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(color: kCyan.withOpacity(0.15), borderRadius: BorderRadius.circular(20)),
+                decoration: BoxDecoration(color: kCyan.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(20)),
                 child: Text(reservation.status, style: const TextStyle(color: kCyan, fontWeight: FontWeight.bold, fontSize: 11)),
               ),
               const Spacer(),

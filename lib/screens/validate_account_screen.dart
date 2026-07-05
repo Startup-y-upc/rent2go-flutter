@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:image_picker/image_picker.dart';
-import 'dart:typed_data';
 import '../widgets/common_widgets.dart';
 import '../services/auth_service.dart';
 
@@ -234,10 +233,10 @@ class _ValidateAccountScreenState extends State<ValidateAccountScreen> {
               ),
               const SizedBox(height: 24),
               if (!widget.reVerifyMode)
-                StepIndicator(
+                const StepIndicator(
                   current: 3,
                   total: 3,
-                  labels: const ['Datos', 'Tipo cuenta', 'Validación'],
+                  labels: ['Datos', 'Tipo cuenta', 'Validación'],
                 ),
               const SizedBox(height: 32),
               Text(widget.reVerifyMode ? 'Verifica tu identidad' : 'Valida tu cuenta',
@@ -252,9 +251,9 @@ class _ValidateAccountScreenState extends State<ValidateAccountScreen> {
                   width: double.infinity,
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.red.withOpacity(0.1),
+                    color: Colors.red.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.redAccent.withOpacity(0.4)),
+                    border: Border.all(color: Colors.redAccent.withValues(alpha: 0.4)),
                   ),
                   child: Row(
                     children: [
@@ -274,7 +273,7 @@ class _ValidateAccountScreenState extends State<ValidateAccountScreen> {
                 child: Form(
                   key: _formKey,
                   child: ListView(children: [
-                  Text('Número de documento (DNI)',
+                  const Text('Número de documento (DNI)',
                       style: TextStyle(color: Colors.white70, fontSize: 13)),
                   const SizedBox(height: 6),
                   TextFormField(
@@ -360,7 +359,7 @@ class _DocCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: kCardBg,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: uploaded ? kCyan.withOpacity(0.5) : Colors.white12),
+        border: Border.all(color: uploaded ? kCyan.withValues(alpha: 0.5) : Colors.white12),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [

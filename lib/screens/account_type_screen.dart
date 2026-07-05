@@ -52,10 +52,10 @@ class _AccountTypeScreenState extends State<AccountTypeScreen> {
               ],
             ),
             const SizedBox(height: 24),
-            StepIndicator(
+            const StepIndicator(
               current: 2,
               total: 3,
-              labels: const ['Datos', 'Tipo cuenta', 'Validación'],
+              labels: ['Datos', 'Tipo cuenta', 'Validación'],
             ),
             const SizedBox(height: 32),
             const Text(
@@ -166,7 +166,7 @@ class _TypeCard extends StatelessWidget {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: selected ? kCyan.withOpacity(0.15) : Colors.white10,
+                color: selected ? kCyan.withValues(alpha: 0.15) : Colors.white10,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(icon, color: selected ? kCyan : Colors.white54, size: 24),

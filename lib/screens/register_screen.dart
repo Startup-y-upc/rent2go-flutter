@@ -134,10 +134,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 style: TextStyle(color: Colors.white54, fontSize: 13),
               ),
               const SizedBox(height: 24),
-              StepIndicator(
+              const StepIndicator(
                 current: 1,
                 total: 3,
-                labels: const ['Datos', 'Tipo cuenta', 'Validación'],
+                labels: ['Datos', 'Tipo cuenta', 'Validación'],
               ),
               const SizedBox(height: 32),
 
@@ -146,9 +146,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   width: double.infinity,
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.red.withOpacity(0.1),
+                    color: Colors.red.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.redAccent.withOpacity(0.4)),
+                    border: Border.all(color: Colors.redAccent.withValues(alpha: 0.4)),
                   ),
                   child: Row(
                     children: [

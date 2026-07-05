@@ -5,7 +5,6 @@ import 'package:image_picker/image_picker.dart';
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
 import 'explore_screen.dart' show BottomNavBar;
-import 'validate_account_screen.dart';
 
 const kCyan = Color(0xFF00E5FF);
 
@@ -513,9 +512,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           padding: const EdgeInsets.all(10),
                           margin: const EdgeInsets.only(bottom: 12),
                           decoration: BoxDecoration(
-                            color: Colors.red.withOpacity(0.08),
+                            color: Colors.red.withValues(alpha: 0.08),
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.redAccent.withOpacity(0.3)),
+                            border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
                           ),
                           child: Text(_errorMsg!, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
                         ),
@@ -594,7 +593,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         onTap: () => context.push('/notifications'),
                       ),
                       const Divider(height: 1),
-                      _OptionRow(icon: Icons.lock_outline, label: 'Privacidad'),
+                      const _OptionRow(icon: Icons.lock_outline, label: 'Privacidad'),
                       const Divider(height: 1),
                       _OptionRow(
                         icon: Icons.description_outlined,
@@ -602,7 +601,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         onTap: () => context.push('/terms'),
                       ),
                       const Divider(height: 1),
-                      _OptionRow(icon: Icons.help_outline, label: 'Ayuda'),
+                      const _OptionRow(icon: Icons.help_outline, label: 'Ayuda'),
                       const Divider(height: 1),
                       _OptionRow(
                         icon: Icons.logout, label: 'Cerrar sesión', color: Colors.red,

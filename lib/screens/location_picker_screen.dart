@@ -68,7 +68,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(10),
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 8)],
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 8)],
               ),
               child: const Text(
                 'Toca el mapa para marcar la ubicación exacta del vehículo',

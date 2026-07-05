@@ -162,7 +162,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
                                     title: Row(
                                       children: [
                                         Expanded(child: Text(otherLabel, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: Colors.black), overflow: TextOverflow.ellipsis)),
-                                        Text(_formatTime(c.lastMessageAt ?? c.createdAt), style: TextStyle(fontSize: 12, color: Colors.grey)),
+                                        Text(_formatTime(c.lastMessageAt ?? c.createdAt), style: const TextStyle(fontSize: 12, color: Colors.grey)),
                                       ],
                                     ),
                                     subtitle: Column(

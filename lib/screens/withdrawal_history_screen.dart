@@ -186,7 +186,7 @@ class _WithdrawalHistoryScreenState extends State<WithdrawalHistoryScreen> {
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(color: _statusColor(w.status).withOpacity(0.15), borderRadius: BorderRadius.circular(20)),
+                decoration: BoxDecoration(color: _statusColor(w.status).withValues(alpha: 0.15), borderRadius: BorderRadius.circular(20)),
                 child: Text(_statusLabel(w.status), style: TextStyle(color: _statusColor(w.status), fontWeight: FontWeight.bold, fontSize: 11)),
               ),
             ],
