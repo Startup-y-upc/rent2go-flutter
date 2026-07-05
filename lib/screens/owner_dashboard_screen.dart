@@ -18,6 +18,7 @@ class OwnerDashboardScreen extends StatefulWidget {
 
 class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   String _firstName = '';
+  String _accountType = '';
   int _myId = 0;
   List<VehicleData> _vehicles = [];
   List<ReservationData> _reservations = [];
@@ -43,6 +44,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
           : (user.username.isNotEmpty ? user.username : 'Usuario');
       setState(() {
         _firstName = name;
+        _accountType = user.accountType;
         _myId = user.userId;
       });
     }
@@ -117,6 +119,17 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
         margin: const EdgeInsets.all(16),
       ),
     );
+  }
+
+  String _roleLabel(String accountType) {
+    switch (accountType.toUpperCase()) {
+      case 'OWNER':
+        return 'Propietario';
+      case 'RENTER':
+        return 'Arrendatario';
+      default:
+        return 'Usuario';
+    }
   }
 
   Future<void> _openChatWithRenter(ReservationData reservation) async {
@@ -288,6 +301,22 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                 style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 14),
               ),
               const SizedBox(height: 4),
+              Wrap(
+                spacing: 8,
+                runSpacing: 2,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    _roleLabel(_accountType),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
               const Text(
                 'Panel de control',
                 style: TextStyle(
@@ -297,9 +326,17 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-              Text(
-                'Ver detalle en Ganancias',
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 14),
+              GestureDetector(
+                onTap: () => context.push('/owner/earnings'),
+                child: Text(
+                  'Ver detalle en Ganancias',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.7),
+                    fontSize: 14,
+                    decoration: TextDecoration.underline,
+                    decorationColor: Colors.white.withValues(alpha: 0.7),
+                  ),
+                ),
               ),
             ],
           ),
@@ -329,24 +366,6 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                 ),
               ),
               const SizedBox(width: 8),
-              GestureDetector(
-                onTap: () => context.go('/home'),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.white10,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.white24),
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.swap_horiz, color: Colors.white, size: 16),
-                      SizedBox(width: 4),
-                      Text('Arrendatario', style: TextStyle(color: Colors.white, fontSize: 12)),
-                    ],
-                  ),
-                ),
-              ),
             ],
           ),
         ),

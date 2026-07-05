@@ -20,6 +20,7 @@ import 'screens/messages_screen.dart';
 import 'screens/chat_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/owner_main_screen.dart';
+import 'screens/owner_earnings_screen.dart';
 import 'screens/owner_reservation_history_screen.dart';
 import 'screens/report_issue_screen.dart';
 import 'screens/rate_reservation_screen.dart';
@@ -151,6 +152,12 @@ final _router = GoRouter(
     ),
 
     GoRoute(path: '/owner', builder: (_, __) => const OwnerMainScreen()),
+    GoRoute(
+      path: '/owner/earnings',
+      builder: (context, __) => OwnerEarningsScreen(
+        onBack: () => context.go('/owner'),
+      ),
+    ),
     GoRoute(path: '/owner/reservation-history', builder: (_, __) => const OwnerReservationHistoryScreen()),
     GoRoute(path: '/owner/withdrawal-history', builder: (_, __) => const WithdrawalHistoryScreen()),
 
