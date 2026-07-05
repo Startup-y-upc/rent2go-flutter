@@ -1,10 +1,61 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../models/counterparty_data.dart';
 import '../widgets/common_widgets.dart';
 import '../services/auth_service.dart';
 import '../services/reservation_service.dart';
 import 'explore_screen.dart' show BottomNavBar;
+
+
+Widget _vehicleThumb(ReservationData reservation, {required double width, required double height}) {
+  final imageUrl = (reservation.vehicleImage != null && reservation.vehicleImage!.isNotEmpty)
+      ? reservation.vehicleImage
+      : (reservation.pickupPhotos.isNotEmpty ? reservation.pickupPhotos.first : null);
+  if (imageUrl == null || imageUrl.isEmpty) {
+    return Container(width: width, height: height, color: Colors.grey[800], child: const Icon(Icons.directions_car, color: Colors.white38));
+  }
+  return CachedNetworkImage(
+    imageUrl: imageUrl,
+    width: width, height: height, fit: BoxFit.cover,
+    errorWidget: (_, __, ___) => Container(width: width, height: height, color: Colors.grey[800], child: const Icon(Icons.directions_car, color: Colors.white38)),
+  );
+}
+
+class _CounterpartyAvatar extends StatelessWidget {
+  final CounterpartyData? counterparty;
+  final double radius;
+  final Color fallbackColor;
+  final Color iconColor;
+  const _CounterpartyAvatar({
+    required this.counterparty,
+    required this.radius,
+    required this.fallbackColor,
+    required this.iconColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final url = counterparty?.profileImageUrl;
+    if (url != null && url.isNotEmpty) {
+      return CircleAvatar(
+        radius: radius,
+        backgroundColor: fallbackColor,
+        backgroundImage: CachedNetworkImageProvider(url),
+        onBackgroundImageError: (_, __) {},
+      );
+    }
+    final name = counterparty?.fullName;
+    if (name != null && name.isNotEmpty) {
+      return CircleAvatar(
+        radius: radius,
+        backgroundColor: fallbackColor,
+        child: Text(name[0].toUpperCase(), style: TextStyle(color: iconColor, fontWeight: FontWeight.bold)),
+      );
+    }
+    return CircleAvatar(radius: radius, backgroundColor: fallbackColor, child: Icon(Icons.person, size: radius + 2, color: iconColor));
+  }
+}
 
 class BookingsScreen extends StatefulWidget {
   const BookingsScreen({super.key});
@@ -238,12 +289,11 @@ class _ActiveBookingCard extends StatelessWidget {
                 const Spacer(),
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
-                  child: reservation.pickupPhotos.isNotEmpty
-                      ? CachedNetworkImage(
-                          imageUrl: reservation.pickupPhotos.first, width: 80, height: 55, fit: BoxFit.cover,
-                          errorWidget: (_, __, ___) => Container(width: 80, height: 55, color: Colors.grey[800], child: const Icon(Icons.directions_car, color: Colors.white38)),
-                        )
-                      : Container(width: 80, height: 55, color: Colors.grey[800], child: const Icon(Icons.directions_car, color: Colors.white38)),
+                  // Sprint 5 (US76/TS23) — prefer the vehicle's real catalog photo
+                  // (ReservationResource.vehicle_image) over the pickup check-in photo,
+                  // which only exists after a check-in has happened. Falls back to a
+                  // generic icon, never a broken-image widget.
+                  child: _vehicleThumb(reservation, width: 80, height: 55),
                 ),
               ],
             ),
@@ -272,7 +322,10 @@ class _ActiveBookingCard extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: Row(
               children: [
-                const CircleAvatar(radius: 16, backgroundColor: Colors.white24, child: Icon(Icons.person, size: 18, color: Colors.white70)),
+                // Sprint 5 (US76/TS23) — real owner photo when available
+                // (CounterpartyResource.profile_image_url), initials fallback,
+                // never a broken-image widget.
+                _CounterpartyAvatar(counterparty: reservation.owner, radius: 16, fallbackColor: Colors.white24, iconColor: Colors.white70),
                 const SizedBox(width: 10),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -330,12 +383,7 @@ class _PastBookingCard extends StatelessWidget {
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
-              child: reservation.pickupPhotos.isNotEmpty
-                  ? CachedNetworkImage(
-                      imageUrl: reservation.pickupPhotos.first, width: 64, height: 48, fit: BoxFit.cover,
-                      errorWidget: (_, __, ___) => Container(width: 64, height: 48, color: Colors.grey[200], child: const Icon(Icons.directions_car, color: Colors.grey)),
-                    )
-                  : Container(width: 64, height: 48, color: Colors.grey[200], child: const Icon(Icons.directions_car, color: Colors.grey)),
+              child: _vehicleThumb(reservation, width: 64, height: 48),
             ),
             const SizedBox(width: 12),
             Expanded(

@@ -142,6 +142,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       'renterId': reservation.renterId,
       'vehicleId': reservation.vehicleId,
       'reservationId': reservation.id,
+      'counterpartyPhotoUrl': reservation.renter?.profileImageUrl,
     });
   }
 

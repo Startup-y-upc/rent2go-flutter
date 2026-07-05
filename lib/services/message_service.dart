@@ -102,6 +102,27 @@ class MessageService {
     throw Exception('No se pudo enviar el mensaje');
   }
 
+  static Future<int> getUnreadCount(int conversationId, int myUserId) async {
+    try {
+      final messages = await getMessages(conversationId);
+      return messages.where((m) => m.senderId != myUserId && (m.readAt == null || m.readAt!.isEmpty)).length;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  static Future<int> getTotalUnreadCount(int userId) async {
+    try {
+      final conversations = await getUserConversations(userId);
+      final counts = await Future.wait(
+        conversations.map((c) => getUnreadCount(c.id, userId)),
+      );
+      return counts.fold<int>(0, (sum, c) => sum + c);
+    } catch (_) {
+      return 0;
+    }
+  }
+
   static Future<void> closeConversation(int conversationId, int userId) async {
     final token = await AuthService.getToken();
     final uri = Uri.parse('$baseUrl/community-trust/conversations/$conversationId/close?userId=$userId');

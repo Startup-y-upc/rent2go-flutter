@@ -18,10 +18,31 @@ class _OwnerVehiclesScreenState extends State<OwnerVehiclesScreen> {
   bool _loading = true;
   String? _errorMsg;
 
+  final _scrollController = ScrollController();
+  int _currentPage = 0;
+  bool _hasMorePages = false;
+  bool _isLoadingMore = false;
+
   @override
   void initState() {
     super.initState();
     _load();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final threshold = _scrollController.position.maxScrollExtent - 200;
+    if (_scrollController.position.pixels >= threshold) {
+      _loadNextPage();
+    }
   }
 
   Future<void> _load() async {
@@ -30,10 +51,40 @@ class _OwnerVehiclesScreenState extends State<OwnerVehiclesScreen> {
       _errorMsg = null;
     });
     try {
-      final vehicles = await VehicleService.getMyVehicles();
-      if (mounted) setState(() { _vehicles = vehicles; _loading = false; });
+      final paged = await VehicleService.getMyVehiclesPaged(page: 0);
+      if (mounted) {
+        setState(() {
+          _vehicles = paged.content;
+          _loading = false;
+          _currentPage = paged.page;
+          _hasMorePages = paged.hasMorePages;
+        });
+      }
     } catch (e) {
       if (mounted) setState(() { _loading = false; _errorMsg = 'No se pudieron cargar tus vehículos.'; });
+    }
+  }
+
+  /// US75/TS22 — loads the next page and appends results, mirroring Kotlin's
+  /// VehicleListViewModel.loadNextPage: guarded against concurrent in-flight
+  /// requests (_isLoadingMore) and against calling past the last page
+  /// (_hasMorePages), matching Kotlin's `hasMorePages = page < totalPages - 1`.
+  Future<void> _loadNextPage() async {
+    if (!_hasMorePages || _isLoadingMore || _loading) return;
+    setState(() => _isLoadingMore = true);
+    final nextPage = _currentPage + 1;
+    try {
+      final paged = await VehicleService.getMyVehiclesPaged(page: nextPage);
+      if (mounted) {
+        setState(() {
+          _vehicles = [..._vehicles, ...paged.content];
+          _currentPage = paged.page;
+          _hasMorePages = paged.hasMorePages;
+          _isLoadingMore = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoadingMore = false);
     }
   }
 
@@ -183,6 +234,8 @@ class _OwnerVehiclesScreenState extends State<OwnerVehiclesScreen> {
                     _buildVehicleList(
                       vehicles: _vehicles,
                       emptyMessage: 'Aún no tienes vehículos aquí',
+                      scrollController: _scrollController,
+                      showLoadMore: true,
                     ),
                     _buildVehicleList(
                       vehicles: _activeVehicles,
@@ -201,6 +254,8 @@ class _OwnerVehiclesScreenState extends State<OwnerVehiclesScreen> {
   Widget _buildVehicleList({
     required List<VehicleData> vehicles,
     required String emptyMessage,
+    ScrollController? scrollController,
+    bool showLoadMore = false,
   }) {
     if (_loading) {
       return const Center(child: CircularProgressIndicator(color: kCyan));
@@ -252,20 +307,33 @@ class _OwnerVehiclesScreenState extends State<OwnerVehiclesScreen> {
       );
     }
 
+    final showSpinner = showLoadMore && _hasMorePages;
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView.separated(
+        key: showLoadMore ? const Key('owner_vehicle_list') : null,
+        controller: scrollController,
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
-        itemCount: vehicles.length,
+        itemCount: vehicles.length + (showSpinner ? 1 : 0),
         separatorBuilder: (_, __) => const SizedBox(height: 16),
-        itemBuilder: (_, i) => _VehicleCard(
-          vehicle: vehicles[i],
-          onTap: () => _goToEdit(vehicles[i]),
-          onPause: () => _togglePause(vehicles[i]),
-          onDelete: () => _confirmDelete(vehicles[i]),
-          onAvailability: () => _goToAvailability(vehicles[i]),
-        ),
+        itemBuilder: (_, i) {
+          if (i >= vehicles.length) {
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: kCyan)),
+              ),
+            );
+          }
+          return _VehicleCard(
+            vehicle: vehicles[i],
+            onTap: () => _goToEdit(vehicles[i]),
+            onPause: () => _togglePause(vehicles[i]),
+            onDelete: () => _confirmDelete(vehicles[i]),
+            onAvailability: () => _goToAvailability(vehicles[i]),
+          );
+        },
       ),
     );
   }

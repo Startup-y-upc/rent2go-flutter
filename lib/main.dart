@@ -147,6 +147,7 @@ final _router = GoRouter(
           renterId: extra['renterId'] as int,
           vehicleId: extra['vehicleId'] as int?,
           reservationId: extra['reservationId'] as int?,
+          counterpartyPhotoUrl: extra['counterpartyPhotoUrl'] as String?,
         );
       },
     ),

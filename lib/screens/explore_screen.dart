@@ -4,6 +4,8 @@ import 'package:latlong2/latlong.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/vehicle_models.dart';
+import '../services/auth_service.dart';
+import '../services/message_service.dart';
 import '../services/vehicle_service.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/vehicle_filter_sheet.dart';
@@ -17,11 +19,17 @@ class ExploreScreen extends StatefulWidget {
 class _ExploreScreenState extends State<ExploreScreen> {
   int? _selectedIndex;
   final _mapController = MapController();
-  static const _madridCenter = LatLng(40.4168, -3.7038);
+
+  static const _limaCenter = LatLng(-12.046374, -77.042793);
 
   List<VehicleData> _vehicles = [];
   bool _loading = true;
   String? _errorMsg;
+
+  final _bottomSheetScrollController = ScrollController();
+  int _currentPage = 0;
+  bool _hasMorePages = false;
+  bool _isLoadingMore = false;
 
   // US63/TS19 — structured filters + geo-radius search state.
   VehicleFilters _filters = const VehicleFilters();
@@ -32,6 +40,22 @@ class _ExploreScreenState extends State<ExploreScreen> {
   void initState() {
     super.initState();
     _load();
+    _bottomSheetScrollController.addListener(_onBottomSheetScroll);
+  }
+
+  @override
+  void dispose() {
+    _bottomSheetScrollController.removeListener(_onBottomSheetScroll);
+    _bottomSheetScrollController.dispose();
+    super.dispose();
+  }
+
+  void _onBottomSheetScroll() {
+    if (!_bottomSheetScrollController.hasClients) return;
+    final threshold = _bottomSheetScrollController.position.maxScrollExtent - 100;
+    if (_bottomSheetScrollController.position.pixels >= threshold) {
+      _loadNextPage();
+    }
   }
 
   Future<void> _load() async {
@@ -40,7 +64,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
       _errorMsg = null;
     });
     try {
-      final vehicles = await VehicleService.getAvailableVehicles(
+      final paged = await VehicleService.getAvailableVehiclesPaged(
+        page: 0,
         minPrice: _filters.minPrice,
         maxPrice: _filters.maxPrice,
         seats: _filters.seats,
@@ -51,9 +76,49 @@ class _ExploreScreenState extends State<ExploreScreen> {
         radiusKm: _filters.radiusKm,
       );
       // Solo mostramos vehículos con coordenadas válidas en el mapa.
-      if (mounted) setState(() { _vehicles = vehicles; _loading = false; });
+      if (mounted) {
+        setState(() {
+          _vehicles = paged.content;
+          _loading = false;
+          _currentPage = paged.page;
+          _hasMorePages = paged.hasMorePages;
+        });
+      }
     } catch (e) {
       if (mounted) setState(() { _loading = false; _errorMsg = 'No se pudieron cargar los vehículos.'; });
+    }
+  }
+
+  /// US75/TS22 — loads the next page and appends results, mirroring Kotlin's
+  /// VehicleListViewModel.loadNextPage: guarded against concurrent in-flight
+  /// requests (_isLoadingMore) and against calling past the last page
+  /// (_hasMorePages), matching Kotlin's `hasMorePages = page < totalPages - 1`.
+  Future<void> _loadNextPage() async {
+    if (!_hasMorePages || _isLoadingMore || _loading) return;
+    setState(() => _isLoadingMore = true);
+    final nextPage = _currentPage + 1;
+    try {
+      final paged = await VehicleService.getAvailableVehiclesPaged(
+        page: nextPage,
+        minPrice: _filters.minPrice,
+        maxPrice: _filters.maxPrice,
+        seats: _filters.seats,
+        transmission: _filters.transmission,
+        fuelType: _filters.fuelType,
+        centerLatitude: _filters.centerLatitude,
+        centerLongitude: _filters.centerLongitude,
+        radiusKm: _filters.radiusKm,
+      );
+      if (mounted) {
+        setState(() {
+          _vehicles = [..._vehicles, ...paged.content];
+          _currentPage = paged.page;
+          _hasMorePages = paged.hasMorePages;
+          _isLoadingMore = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoadingMore = false);
     }
   }
 
@@ -115,7 +180,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
     if (v.latitude != null && v.longitude != null && (v.latitude != 0 || v.longitude != 0)) {
       return LatLng(v.latitude!, v.longitude!);
     }
-    return _madridCenter;
+    return _limaCenter;
   }
 
   @override
@@ -129,7 +194,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
             child: FlutterMap(
               mapController: _mapController,
               options: MapOptions(
-                initialCenter: _madridCenter,
+                initialCenter: _limaCenter,
                 initialZoom: 13,
                 // TS19 — long press drops a search pin for geo-radius search, same
                 // centerLatitude/centerLongitude/radiusKm params Kotlin's map uses.
@@ -221,7 +286,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Madrid · Centro', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Colors.black)),
+                        const Text('Lima · Centro', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Colors.black)),
                         Text('Mar 12 May → Jue 14 May', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
                       ],
                     ),
@@ -296,18 +361,36 @@ class _ExploreScreenState extends State<ExploreScreen> {
                             : _vehicles.isEmpty
                                 ? Center(child: Text('No hay vehículos disponibles por ahora', style: TextStyle(color: Colors.grey[400])))
                                 : ListView.builder(
+                                    key: const Key('explore_vehicle_list'),
+                                    controller: _bottomSheetScrollController,
                                     scrollDirection: Axis.horizontal,
                                     padding: const EdgeInsets.symmetric(horizontal: 16),
-                                    itemCount: _vehicles.length,
-                                    itemBuilder: (_, i) => _CarCard(
-                                      vehicle: _vehicles[i],
-                                      selected: _selectedIndex == i,
-                                      onTap: () {
-                                        setState(() => _selectedIndex = i);
-                                        _mapController.move(_locationOf(_vehicles[i]), 15);
-                                      },
-                                      onDetail: () => context.push('/car-detail', extra: _vehicles[i]),
-                                    ),
+                                    itemCount: _vehicles.length + (_hasMorePages ? 1 : 0),
+                                    itemBuilder: (_, i) {
+                                      if (i >= _vehicles.length) {
+                                        return const Padding(
+                                          padding: EdgeInsets.symmetric(horizontal: 16),
+                                          child: SizedBox(
+                                            width: 40,
+                                            child: Center(
+                                              child: SizedBox(
+                                                width: 20, height: 20,
+                                                child: CircularProgressIndicator(strokeWidth: 2, color: kCyan),
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                      return _CarCard(
+                                        vehicle: _vehicles[i],
+                                        selected: _selectedIndex == i,
+                                        onTap: () {
+                                          setState(() => _selectedIndex = i);
+                                          _mapController.move(_locationOf(_vehicles[i]), 15);
+                                        },
+                                        onDetail: () => context.push('/car-detail', extra: _vehicles[i]),
+                                      );
+                                    },
                                   ),
                   ),
                   const SizedBox(height: 8),
@@ -461,10 +544,34 @@ class _CarCard extends StatelessWidget {
   }
 }
 
-class BottomNavBar extends StatelessWidget {
+class BottomNavBar extends StatefulWidget {
   final int current;
   final ValueChanged<int> onTap;
   const BottomNavBar({super.key, required this.current, required this.onTap});
+
+  @override
+  State<BottomNavBar> createState() => _BottomNavBarState();
+}
+
+class _BottomNavBarState extends State<BottomNavBar> {
+  // US72 — numeric unread-count badge on the "Mensajes" tab icon (WCAG: not
+  // color-only). Loaded once per BottomNavBar mount; messages_screen.dart's own
+  // per-conversation counts are the source of truth when the user is actually
+  // on that screen, this is just the passive nav-level indicator.
+  int _unreadTotal = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUnreadTotal();
+  }
+
+  Future<void> _loadUnreadTotal() async {
+    final me = await AuthService.getCurrentUser();
+    if (me == null) return;
+    final total = await MessageService.getTotalUnreadCount(me.userId);
+    if (mounted) setState(() => _unreadTotal = total);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -480,17 +587,38 @@ class BottomNavBar extends StatelessWidget {
         top: false,
         child: Row(
           children: items.asMap().entries.map((e) {
-            final active = e.key == current;
+            final active = e.key == widget.current;
+            final isMessagesTab = e.key == 2;
             return Expanded(
               child: GestureDetector(
-                onTap: () => onTap(e.key),
+                onTap: () => widget.onTap(e.key),
                 child: Container(
                   color: Colors.transparent,
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(e.value.$1, color: active ? kCyan : Colors.grey, size: 22),
+                      Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Icon(e.value.$1, color: active ? kCyan : Colors.grey, size: 22),
+                          if (isMessagesTab && _unreadTotal > 0)
+                            Positioned(
+                              right: -8, top: -4,
+                              child: Container(
+                                key: const Key('bottom_nav_messages_unread_badge'),
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                constraints: const BoxConstraints(minWidth: 16),
+                                decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(10)),
+                                child: Text(
+                                  _unreadTotal > 99 ? '99+' : '$_unreadTotal',
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
                       const SizedBox(height: 4),
                       Text(e.value.$2, style: TextStyle(fontSize: 11, color: active ? kCyan : Colors.grey)),
                     ],

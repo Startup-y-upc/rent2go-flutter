@@ -27,6 +27,10 @@ class ReservationData {
   // alongside renterId/ownerId. Null when the backend hasn't sent them yet.
   final CounterpartyData? renter;
   final CounterpartyData? owner;
+  // additive: the vehicle's catalog photo, sourced from
+  // Vehicle.primaryImageUrl via ReservationResource's "vehicle_image" field.
+  // Null when the vehicle has no registered image.
+  final String? vehicleImage;
 
   ReservationData({
     required this.id,
@@ -48,6 +52,7 @@ class ReservationData {
     this.damageReport,
     this.renter,
     this.owner,
+    this.vehicleImage,
   });
 
   /// Nombre a mostrar del arrendatario: nombre real si el backend lo envió,
@@ -76,6 +81,7 @@ class ReservationData {
       damageReport: json['damageReport']?.toString(),
       renter: CounterpartyData.tryParse(json['renter']),
       owner: CounterpartyData.tryParse(json['owner']),
+      vehicleImage: json['vehicle_image']?.toString() ?? json['vehicleImage']?.toString(),
     );
   }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../widgets/common_widgets.dart';
 import '../services/auth_service.dart';
 import '../services/reservation_service.dart';
@@ -197,8 +198,50 @@ class _OwnerReservationHistoryScreenState extends State<OwnerReservationHistoryS
             ],
           ),
           const SizedBox(height: 12),
-          Text('Reserva ${reservation.reservationCode}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black)),
-          Text('Cliente #${reservation.renterId}', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Sprint 5 (US76/TS23) — real vehicle photo (ReservationResource.vehicle_image)
+              // replacing the previous no-image layout; explicit generic-icon fallback.
+              ClipRRect(
+                key: const Key('owner_history_vehicle_thumb'),
+                borderRadius: BorderRadius.circular(10),
+                child: (reservation.vehicleImage != null && reservation.vehicleImage!.isNotEmpty)
+                    ? CachedNetworkImage(
+                        imageUrl: reservation.vehicleImage!,
+                        width: 56, height: 42, fit: BoxFit.cover,
+                        errorWidget: (_, __, ___) => Container(width: 56, height: 42, color: Colors.grey[200], child: const Icon(Icons.directions_car, color: Colors.grey, size: 20)),
+                      )
+                    : Container(width: 56, height: 42, color: Colors.grey[200], child: const Icon(Icons.directions_car, color: Colors.grey, size: 20)),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Reserva ${reservation.reservationCode}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black)),
+                    Row(
+                      children: [
+                        Flexible(child: Text(reservation.renterDisplayName, style: TextStyle(color: Colors.grey.shade600, fontSize: 13), overflow: TextOverflow.ellipsis)),
+                        // Sprint 5 (US76/TS23) — split verification badges (dni_verified/
+                        // license_verified), WCAG-friendly: icon + implicit text label
+                        // via tooltip, never color-only.
+                        if (reservation.renter?.dniVerified == true) ...[
+                          const SizedBox(width: 4),
+                          const Tooltip(message: 'DNI verificado', child: Icon(Icons.badge, size: 14, color: kCyan)),
+                        ],
+                        if (reservation.renter?.licenseVerified == true) ...[
+                          const SizedBox(width: 4),
+                          const Tooltip(message: 'Licencia verificada', child: Icon(Icons.verified_user, size: 14, color: kCyan)),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
           Text('${reservation.startDate} → ${reservation.endDate}', style: TextStyle(color: Colors.grey.shade800, fontSize: 13)),
           const SizedBox(height: 12),
           Align(

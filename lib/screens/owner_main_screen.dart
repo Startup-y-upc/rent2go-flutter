@@ -5,6 +5,8 @@ import 'owner_messages_screen.dart';
 import 'owner_earnings_screen.dart';
 import 'owner_profile_screen.dart';
 import '../widgets/common_widgets.dart';
+import '../services/auth_service.dart';
+import '../services/message_service.dart';
 
 class OwnerMainScreen extends StatefulWidget {
   const OwnerMainScreen({super.key});
@@ -16,6 +18,21 @@ class OwnerMainScreen extends StatefulWidget {
 class _OwnerMainScreenState extends State<OwnerMainScreen> {
   int _currentIndex = 0;
   bool _showEarningsInsideProfile = false;
+
+  int _unreadTotal = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUnreadTotal();
+  }
+
+  Future<void> _loadUnreadTotal() async {
+    final me = await AuthService.getCurrentUser();
+    if (me == null) return;
+    final total = await MessageService.getTotalUnreadCount(me.userId);
+    if (mounted) setState(() => _unreadTotal = total);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -67,6 +84,7 @@ class _OwnerMainScreenState extends State<OwnerMainScreen> {
 
   Widget _buildNavItem(int index, IconData icon, IconData activeIcon, String label) {
     final bool isActive = _currentIndex == index;
+    final isMessagesTab = index == 2;
     return GestureDetector(
       onTap: () {
         setState(() {
@@ -78,7 +96,27 @@ class _OwnerMainScreenState extends State<OwnerMainScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(isActive ? activeIcon : icon, color: isActive ? kCyan : Colors.grey, size: 24),
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Icon(isActive ? activeIcon : icon, color: isActive ? kCyan : Colors.grey, size: 24),
+              if (isMessagesTab && _unreadTotal > 0)
+                Positioned(
+                  right: -8, top: -4,
+                  child: Container(
+                    key: const Key('owner_bottom_nav_messages_unread_badge'),
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                    constraints: const BoxConstraints(minWidth: 16),
+                    decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(10)),
+                    child: Text(
+                      _unreadTotal > 99 ? '99+' : '$_unreadTotal',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+            ],
+          ),
           const SizedBox(height: 4),
           Text(
             label,

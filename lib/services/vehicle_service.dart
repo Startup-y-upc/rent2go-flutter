@@ -8,7 +8,16 @@ class VehicleService {
   static const String baseUrl = 'https://rent2go-backend-production.up.railway.app/api/v1';
 
   /// GET /api/v1/vehicles/me — vehículos publicados por el propietario actual
+  /// (primera página únicamente; usado por callers que no necesitan paginación).
   static Future<List<VehicleData>> getMyVehicles({int page = 0, int size = 20}) async {
+    final paged = await getMyVehiclesPaged(page: page, size: size);
+    return paged.content;
+  }
+
+  /// GET /api/v1/vehicles/me — versión paginada completa (US75/TS22).
+  /// A diferencia de [getMyVehicles], expone `page`/`totalPages`/`totalElements`
+  /// del `PagedResponse` para que la UI pueda implementar "cargar más".
+  static Future<PagedVehicles> getMyVehiclesPaged({int page = 0, int size = 20}) async {
     final token = await AuthService.getToken();
     final uri = Uri.parse('$baseUrl/vehicles/me?page=$page&size=$size');
     final response = await http.get(
@@ -18,8 +27,7 @@ class VehicleService {
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
-      final content = data['content'] as List;
-      return content.map((v) => VehicleData.fromJson(v)).toList();
+      return PagedVehicles.fromJson(data);
     }
     throw Exception('No se pudieron cargar tus vehículos');
   }
@@ -147,6 +155,39 @@ class VehicleService {
     double? centerLongitude,
     double? radiusKm,
   }) async {
+    final paged = await getAvailableVehiclesPaged(
+      page: page,
+      size: size,
+      minPrice: minPrice,
+      maxPrice: maxPrice,
+      seats: seats,
+      transmission: transmission,
+      fuelType: fuelType,
+      centerLatitude: centerLatitude,
+      centerLongitude: centerLongitude,
+      radiusKm: radiusKm,
+    );
+    return paged.content;
+  }
+
+  /// GET /api/v1/vehicles — versión paginada completa (US75/TS22).
+  /// Igual que [getAvailableVehicles] pero expone el `PagedResponse` completo
+  /// (page/size/totalElements/totalPages) para alimentar scroll-triggered
+  /// "load more" en explore_screen.dart, mirroring Kotlin's
+  /// VehicleListViewModel.loadNextPage semantics (page-index tracking,
+  /// hasMorePages = page < totalPages - 1).
+  static Future<PagedVehicles> getAvailableVehiclesPaged({
+    int page = 0,
+    int size = 50,
+    double? minPrice,
+    double? maxPrice,
+    int? seats,
+    String? transmission,
+    String? fuelType,
+    double? centerLatitude,
+    double? centerLongitude,
+    double? radiusKm,
+  }) async {
     final queryParams = <String, String>{
       'page': page.toString(),
       'size': size.toString(),
@@ -164,8 +205,7 @@ class VehicleService {
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body) as Map<String, dynamic>;
-      final content = data['content'] as List;
-      return content.map((v) => VehicleData.fromJson(v)).toList();
+      return PagedVehicles.fromJson(data);
     }
     throw Exception('No se pudieron cargar los vehículos disponibles');
   }

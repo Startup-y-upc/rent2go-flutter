@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../models/message_models.dart';
 import '../services/auth_service.dart';
 import '../services/message_service.dart';
@@ -13,6 +14,8 @@ class OwnerMessagesScreen extends StatefulWidget {
 class _OwnerMessagesScreenState extends State<OwnerMessagesScreen> {
   int _filter = 0; // 0=Todos 1=Activos 2=Sin leer
   List<ConversationData> _conversations = [];
+  // US71 — real per-conversation unread counts, keyed by conversation id.
+  Map<int, int> _unreadCounts = {};
   int? _myUserId;
   bool _loading = true;
   String? _errorMsg;
@@ -38,20 +41,33 @@ class _OwnerMessagesScreenState extends State<OwnerMessagesScreen> {
       final convs = await MessageService.getUserConversations(_myUserId!);
       convs.sort((a, b) => (b.lastMessageAt ?? b.createdAt).compareTo(a.lastMessageAt ?? a.createdAt));
       if (mounted) setState(() { _conversations = convs; _loading = false; });
+      _loadUnreadCounts(convs);
     } catch (e) {
       if (mounted) setState(() { _loading = false; _errorMsg = 'No se pudieron cargar tus mensajes.'; });
     }
   }
 
+  Future<void> _loadUnreadCounts(List<ConversationData> convs) async {
+    if (_myUserId == null) return;
+    final myId = _myUserId!;
+    final entries = await Future.wait(convs.map((c) async {
+      final count = await MessageService.getUnreadCount(c.id, myId);
+      return MapEntry(c.id, count);
+    }));
+    if (mounted) setState(() => _unreadCounts = Map.fromEntries(entries));
+  }
+
   List<ConversationData> get _filtered {
     if (_filter == 1) return _conversations.where((c) => c.status.toUpperCase() == 'OPEN' || c.status.toUpperCase() == 'ACTIVE').toList();
-    if (_filter == 2) return _conversations;
+    // US71 — "Sin leer" now reflects real unread counts (was a no-op stub).
+    if (_filter == 2) return _conversations.where((c) => (_unreadCounts[c.id] ?? 0) > 0).toList();
     return _conversations;
   }
 
   void _openChat(ConversationData c) {
     if (_myUserId == null) return;
     final iAmOwner = c.ownerId == _myUserId;
+    final other = iAmOwner ? c.renter : c.owner;
     context.push('/chat', extra: {
       'name': iAmOwner ? c.renterDisplayName : c.ownerDisplayName,
       'car': c.subject,
@@ -60,6 +76,7 @@ class _OwnerMessagesScreenState extends State<OwnerMessagesScreen> {
       'renterId': c.renterId,
       'vehicleId': c.vehicleId,
       'reservationId': c.reservationId,
+      'counterpartyPhotoUrl': other?.profileImageUrl,
     });
   }
 
@@ -143,13 +160,23 @@ class _OwnerMessagesScreenState extends State<OwnerMessagesScreen> {
                                   final c = _filtered[i];
                                   final iAmOwner = c.ownerId == _myUserId;
                                   final otherLabel = iAmOwner ? c.renterDisplayName : c.ownerDisplayName;
+                                  final otherPhoto = (iAmOwner ? c.renter : c.owner)?.profileImageUrl;
+                                  final unread = _unreadCounts[c.id] ?? 0;
                                   return ListTile(
+                                    key: Key('conversation_tile_${c.id}'),
                                     contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                                    leading: CircleAvatar(
-                                      radius: 24,
-                                      backgroundColor: Colors.grey.shade200,
-                                      child: Text(otherLabel[0], style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black54, fontSize: 18)),
-                                    ),
+                                    leading: (otherPhoto != null && otherPhoto.isNotEmpty)
+                                        ? CircleAvatar(
+                                            radius: 24,
+                                            backgroundColor: Colors.grey.shade200,
+                                            backgroundImage: CachedNetworkImageProvider(otherPhoto),
+                                            onBackgroundImageError: (_, __) {},
+                                          )
+                                        : CircleAvatar(
+                                            radius: 24,
+                                            backgroundColor: Colors.grey.shade200,
+                                            child: Text(otherLabel[0], style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black54, fontSize: 18)),
+                                          ),
                                     title: Row(
                                       children: [
                                         Expanded(child: Text(otherLabel, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: Colors.black), overflow: TextOverflow.ellipsis)),
@@ -172,6 +199,19 @@ class _OwnerMessagesScreenState extends State<OwnerMessagesScreen> {
                                         ),
                                       ],
                                     ),
+                                    trailing: unread > 0
+                                        ? Container(
+                                            key: Key('conversation_unread_badge_${c.id}'),
+                                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                            decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(12)),
+                                            constraints: const BoxConstraints(minWidth: 22),
+                                            child: Text(
+                                              unread > 99 ? '99+' : '$unread',
+                                              textAlign: TextAlign.center,
+                                              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                                            ),
+                                          )
+                                        : null,
                                     onTap: () => _openChat(c),
                                   );
                                 },

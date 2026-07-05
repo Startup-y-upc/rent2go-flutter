@@ -247,12 +247,9 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
             ),
             const SizedBox(height: 14),
-            _Field(label: 'Ubicación', controller: _locationCtrl, hint: 'Madrid, España'),
+            _Field(label: 'Ubicación', controller: _locationCtrl, hint: 'Miraflores, Lima'),
             const SizedBox(height: 14),
 
-            // US65 — required map-picked location (lat/lon), separate from the free-text
-            // address field above. Communicates clearly that this step is mandatory,
-            // consistent with the form's other required-field validation.
             const Text('Ubicación exacta en el mapa *', style: TextStyle(color: Colors.black54, fontSize: 12)),
             const SizedBox(height: 6),
             GestureDetector(

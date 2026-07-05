@@ -5,6 +5,7 @@ import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:go_router/go_router.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/vehicle_models.dart';
+import '../services/auth_service.dart';
 import '../services/payments_service.dart';
 import '../services/reservation_service.dart';
 import '../services/vehicle_service.dart';
@@ -155,6 +156,27 @@ class _ReservationDetailScreenState extends State<ReservationDetailScreen> {
     }
   }
 
+  /// US72 — chat entry point from the reservation detail screen, reusing the
+  /// same '/chat' route + params contract as car_detail_screen.dart/messages_screen.dart.
+  Future<void> _openChat(BuildContext context) async {
+    final me = await AuthService.getCurrentUser();
+    final myId = me?.userId ?? 0;
+    final iAmOwner = myId == _reservation.ownerId;
+    final otherName = iAmOwner ? _reservation.renterDisplayName : _reservation.ownerDisplayName;
+    final otherCounterparty = iAmOwner ? _reservation.renter : _reservation.owner;
+    if (!context.mounted) return;
+    context.push('/chat', extra: {
+      'name': otherName,
+      'car': _reservation.reservationCode,
+      'isOnline': false,
+      'ownerId': _reservation.ownerId,
+      'renterId': _reservation.renterId,
+      'vehicleId': _reservation.vehicleId,
+      'reservationId': _reservation.id,
+      'counterpartyPhotoUrl': otherCounterparty?.profileImageUrl,
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -179,6 +201,22 @@ class _ReservationDetailScreenState extends State<ReservationDetailScreen> {
             ),
             const SizedBox(height: 20),
             _buildVehicleSection(),
+            const SizedBox(height: 16),
+            _buildCounterpartySection(),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              key: const Key('reservation_detail_chat_button'),
+              onPressed: () => _openChat(context),
+              icon: const Icon(Icons.chat_bubble_outline, size: 18),
+              label: const Text('Abrir chat'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: kCyan,
+                side: const BorderSide(color: kCyan),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                minimumSize: const Size(double.infinity, 44),
+              ),
+            ),
             const SizedBox(height: 20),
             _row('Recogida', _reservation.startDate),
             _row('Devolución', _reservation.endDate),
@@ -320,21 +358,11 @@ class _ReservationDetailScreenState extends State<ReservationDetailScreen> {
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(10),
-                child: (vehicle.primaryImageUrl != null && vehicle.primaryImageUrl!.isNotEmpty)
-                    ? CachedNetworkImage(
-                        imageUrl: vehicle.primaryImageUrl!,
-                        width: 90,
-                        height: 68,
-                        fit: BoxFit.cover,
-                        errorWidget: (_, __, ___) => Container(
-                          width: 90, height: 68, color: Colors.grey[300],
-                          child: const Icon(Icons.directions_car),
-                        ),
-                      )
-                    : Container(
-                        width: 90, height: 68, color: Colors.grey[300],
-                        child: const Icon(Icons.directions_car),
-                      ),
+                // Sprint 5 (US76/TS23) — prefer ReservationResource.vehicle_image
+                // (always available once the reservation is created) over the
+                // vehicle catalog's primaryImageUrl (requires the second fetch to
+                // succeed); explicit generic-icon fallback if both are absent.
+                child: _reservationOrVehicleImage(90, 68),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -389,6 +417,68 @@ class _ReservationDetailScreenState extends State<ReservationDetailScreen> {
             const SizedBox(height: 10),
             _VehicleLocationPreview(key: const Key('reservation_detail_vehicle_map'), latitude: vehicle.latitude!, longitude: vehicle.longitude!),
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _reservationOrVehicleImage(double width, double height) {
+    final imageUrl = (_reservation.vehicleImage != null && _reservation.vehicleImage!.isNotEmpty)
+        ? _reservation.vehicleImage
+        : _vehicle?.primaryImageUrl;
+    if (imageUrl == null || imageUrl.isEmpty) {
+      return Container(width: width, height: height, color: Colors.grey[300], child: const Icon(Icons.directions_car));
+    }
+    return CachedNetworkImage(
+      imageUrl: imageUrl,
+      width: width, height: height, fit: BoxFit.cover,
+      errorWidget: (_, __, ___) => Container(width: width, height: height, color: Colors.grey[300], child: const Icon(Icons.directions_car)),
+    );
+  }
+
+  /// Sprint 5 (US76/TS23) — counterparty identity card: real name, split
+  /// verification badges (dniVerified/licenseVerified), and profile photo
+  /// with explicit initials fallback (never a broken-image widget).
+  Widget _buildCounterpartySection() {
+    // Shown from whichever side is viewing: renter sees the owner, owner sees the renter.
+    final counterparty = _reservation.owner ?? _reservation.renter;
+    final label = _reservation.owner != null ? 'Propietario' : 'Contraparte';
+    final displayName = _reservation.owner?.fullName ?? _reservation.renterDisplayName;
+    final photoUrl = counterparty?.profileImageUrl;
+    return Container(
+      key: const Key('reservation_detail_counterparty_card'),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: Colors.grey[50], borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.grey.shade200)),
+      child: Row(
+        children: [
+          (photoUrl != null && photoUrl.isNotEmpty)
+              ? CircleAvatar(radius: 22, backgroundColor: Colors.teal.shade100, backgroundImage: CachedNetworkImageProvider(photoUrl), onBackgroundImageError: (_, __) {})
+              : CircleAvatar(
+                  radius: 22, backgroundColor: Colors.teal.shade100,
+                  child: Text(displayName.isNotEmpty ? displayName[0].toUpperCase() : '?', style: const TextStyle(color: Colors.teal, fontWeight: FontWeight.bold)),
+                ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.black, fontSize: 12)),
+                Row(
+                  children: [
+                    Flexible(child: Text(displayName, style: TextStyle(color: Colors.grey[700], fontSize: 13), overflow: TextOverflow.ellipsis)),
+                    if (counterparty?.dniVerified == true) ...[
+                      const SizedBox(width: 6),
+                      const Tooltip(message: 'DNI verificado', child: Icon(Icons.badge, size: 14, color: kCyan)),
+                    ],
+                    if (counterparty?.licenseVerified == true) ...[
+                      const SizedBox(width: 4),
+                      const Tooltip(message: 'Licencia verificada', child: Icon(Icons.verified_user, size: 14, color: kCyan)),
+                    ],
+                  ],
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
