@@ -7,9 +7,30 @@ import 'auth_service.dart';
 class MessageService {
   static const String baseUrl = 'https://rent2go-backend-production.up.railway.app/api/v1';
 
+  // In-flight request de-duplication for getUserConversations. A single
+  // screen (e.g. MessagesScreen) and the BottomNavBar it renders both need
+  // the same conversations list at mount time — one to populate the list,
+  // the other to compute the activity dot via hasRecentActivity(). Without
+  // this, both callers fire the GET .../conversations request concurrently.
+  // Keying by userId and reusing the in-flight Future (cleared once it
+  // settles) collapses concurrent callers into a single HTTP request while
+  // still returning fresh data on every call that isn't overlapping one.
+  static final Map<int, Future<List<ConversationData>>> _inFlightConversations = {};
+
   /// GET /api/v1/community-trust/users/{userId}/conversations
   /// Lista todas las conversaciones reales del usuario actual (como owner o renter).
-  static Future<List<ConversationData>> getUserConversations(int userId) async {
+  static Future<List<ConversationData>> getUserConversations(int userId) {
+    final existing = _inFlightConversations[userId];
+    if (existing != null) return existing;
+
+    final request = _fetchUserConversations(userId).whenComplete(() {
+      _inFlightConversations.remove(userId);
+    });
+    _inFlightConversations[userId] = request;
+    return request;
+  }
+
+  static Future<List<ConversationData>> _fetchUserConversations(int userId) async {
     final token = await AuthService.getToken();
     final uri = Uri.parse('$baseUrl/community-trust/users/$userId/conversations');
     final response = await http.get(
@@ -117,7 +138,10 @@ class MessageService {
   /// items client-side): the conversations list endpoint already returns
   /// `lastMessageAt` for free, so this only needs the single list call plus a
   /// local timestamp comparison — no per-conversation message fetch, no
-  /// numeric count, just "is there something new".
+  /// numeric count, just "is there something new". When this runs at the same
+  /// time as MessagesScreen/OwnerMessagesScreen's own load (e.g. both mount
+  /// together on app start), [getUserConversations]'s in-flight
+  /// de-duplication ensures only one HTTP request actually goes out.
   static Future<bool> hasRecentActivity(int userId) async {
     try {
       final conversations = await getUserConversations(userId);

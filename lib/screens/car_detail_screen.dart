@@ -280,7 +280,7 @@ class _CarDetailScreenState extends State<CarDetailScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text('S/ ${vehicle.dailyPrice.toInt()}/día', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: colorScheme.onSurface)),
-                      Text('2 días · Total S/${(vehicle.dailyPrice * 2).toInt()}', style: TextStyle(color: Colors.black, fontSize: 12)),
+                      Text('2 días · Total S/${(vehicle.dailyPrice * 2).toInt()}', style: TextStyle(color: colorScheme.onSurface, fontSize: 12)),
                     ],
                   ),
                   const SizedBox(width: 16),

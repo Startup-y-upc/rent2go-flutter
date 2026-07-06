@@ -168,23 +168,52 @@ class ReservationService {
       return ReservationData.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
     }
 
+    // Bugfix: el backend valida disponibilidad de fechas en el servidor (RES-02 —
+    // overlap contra reservas en estado PENDING/CONFIRMED/ACTIVE/RETURN_PENDING/
+    // RETURN_CONFIRMED) y responde 409 CONFLICT con un mensaje de negocio claro
+    // ("El vehículo ya tiene una reserva para las fechas solicitadas.") vía
+    // GlobalExceptionHandler. Antes este mensaje se descartaba y se mostraba
+    // siempre el genérico de abajo, lo que ocultaba al usuario la causa real
+    // (conflicto de fechas) — ahora se propaga el mensaje real del backend
+    // cuando está disponible.
+    if (response.statusCode == 409) {
+      try {
+        final body = jsonDecode(response.body);
+        if (body is Map && (body['error'] != null || body['message'] != null)) {
+          throw ReservationException((body['error'] ?? body['message']).toString());
+        }
+      } catch (e) {
+        if (e is ReservationException) rethrow;
+      }
+      throw ReservationException(
+          'El vehículo ya no está disponible en las fechas seleccionadas. Elige otras fechas e inténtalo de nuevo.');
+    }
+
     throw ReservationException(
         'El pago se procesó pero no se pudo crear la reserva. Contacta a soporte con este código de referencia.');
   }
 
   /// GET /api/v1/reservations?renterId=... — vista de renter, siempre este endpoint
   /// desde pantallas role-fixed de renter (bookings_screen.dart).
+  ///
+  /// Perf fix (2026-07-06): este endpoint YA NO pagina en el backend — siempre devuelve
+  /// la lista COMPLETA de reservas del renter, ordenada con las no-terminales
+  /// (PENDING/CONFIRMED/ACTIVE/RETURN_PENDING/RETURN_CONFIRMED) primero y las terminales
+  /// (COMPLETED/CANCELLED/EXPIRED) al final, más recientes primero dentro de cada grupo.
+  /// Los parámetros [page]/[size] se mantienen en esta firma solo por compatibilidad de
+  /// llamada (dejan de tener efecto: el servidor los ignora silenciosamente ya que el
+  /// controller ya no los declara), pero ya no reflejan paginación real — `content` siempre
+  /// trae todas las reservas y `totalPages` siempre es 1. Se recomienda dejar de pasarlos
+  /// desde los call sites y actualizar la UI para no asumir "carga de más páginas".
   static Future<PagedReservations> getMyReservationsAsRenter({
     required int renterId,
     String? status,
-    int page = 1,
-    int size = 20,
+    @Deprecated('El backend ya no pagina este endpoint; se ignora silenciosamente.') int page = 1,
+    @Deprecated('El backend ya no pagina este endpoint; se ignora silenciosamente.') int size = 20,
   }) async {
     final token = await AuthService.getToken();
     final queryParams = <String, String>{
       'renterId': renterId.toString(),
-      'page': page.toString(),
-      'size': size.toString(),
       if (status != null) 'status': status,
     };
     final uri = Uri.parse('$baseUrl/reservations').replace(queryParameters: queryParams);

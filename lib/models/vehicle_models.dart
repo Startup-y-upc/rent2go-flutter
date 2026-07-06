@@ -84,6 +84,22 @@ class VehicleCategory {
   }
 }
 
+/// Feature/amenidad de vehículo (GET /api/v1/features). Solo se consume aquí
+/// para poblar la selección múltiple del formulario de vehículo — no hay UI
+/// de administración de catálogo (crear/editar/eliminar features) en Flutter.
+class VehicleFeature {
+  final int id;
+  final String name;
+  const VehicleFeature({required this.id, required this.name});
+
+  factory VehicleFeature.fromJson(Map<String, dynamic> json) {
+    return VehicleFeature(
+      id: json['id'] as int,
+      name: json['name'] ?? '',
+    );
+  }
+}
+
 /// Sprint 5 (US75/TS22) — full `PagedResponse` projection (content/page/size/
 /// totalElements/totalPages), mirroring Kotlin's `PagedVehicleResponse` /
 /// `VehicleListState` pagination fields (currentPage/totalPages/hasMorePages).

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/vehicle_models.dart';
+import '../services/feature_service.dart';
 import '../services/vehicle_service.dart';
 import '../widgets/common_widgets.dart';
 import 'location_picker_screen.dart';
@@ -38,6 +39,12 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
   // US65 — required map-picked location; no manual lat/lon fields.
   LatLng? _pickedLocation;
 
+  // Features/amenidades — GET /api/v1/features para el catálogo completo;
+  // ninguna preseleccionada por defecto en modo creación.
+  List<VehicleFeature> _availableFeatures = [];
+  final Set<String> _selectedFeatureNames = {};
+  bool _loadingFeatures = true;
+
   bool _loadingCategories = true;
   bool _saving = false;
   String? _errorMsg;
@@ -49,11 +56,17 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
   void initState() {
     super.initState();
     _loadCategories();
+    _loadFeatures();
   }
 
   Future<void> _loadCategories() async {
     final cats = await VehicleService.getCategories();
     if (mounted) setState(() { _categories = cats; _loadingCategories = false; });
+  }
+
+  Future<void> _loadFeatures() async {
+    final features = await FeatureService.getFeatures();
+    if (mounted) setState(() { _availableFeatures = features; _loadingFeatures = false; });
   }
 
   Future<void> _pickImage() async {
@@ -122,6 +135,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
         fuelType: _fuelType!,
         latitude: _pickedLocation!.latitude,
         longitude: _pickedLocation!.longitude,
+        featureNames: _selectedFeatureNames.toList(),
         imageBytes: _imageBytes!,
         imageFilename: _imageFilename ?? 'vehicle.jpg',
       );
@@ -343,6 +357,37 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
                 enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: Colors.grey.shade300)),
               ),
             ),
+            const SizedBox(height: 20),
+
+            const Text('Características', style: TextStyle(color: Colors.black54, fontSize: 12)),
+            const SizedBox(height: 6),
+            _loadingFeatures
+                ? const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: LinearProgressIndicator())
+                : _availableFeatures.isEmpty
+                    ? Text('No hay features disponibles', style: TextStyle(color: Colors.grey[500], fontSize: 13))
+                    : Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: _availableFeatures.map((f) {
+                          final selected = _selectedFeatureNames.contains(f.name);
+                          return FilterChip(
+                            label: Text(f.name),
+                            selected: selected,
+                            selectedColor: kCyan.withValues(alpha: 0.2),
+                            checkmarkColor: Colors.black,
+                            labelStyle: const TextStyle(color: Colors.black87, fontSize: 13),
+                            backgroundColor: Colors.white,
+                            side: BorderSide(color: Colors.grey.shade300),
+                            onSelected: (val) => setState(() {
+                              if (val) {
+                                _selectedFeatureNames.add(f.name);
+                              } else {
+                                _selectedFeatureNames.remove(f.name);
+                              }
+                            }),
+                          );
+                        }).toList(),
+                      ),
             const SizedBox(height: 28),
 
             SizedBox(

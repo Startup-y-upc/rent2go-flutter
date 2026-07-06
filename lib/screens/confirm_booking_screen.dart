@@ -40,12 +40,39 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
   bool _calculating = false;
   String? _loadError;
 
-  // Bloqueos de disponibilidad del vehículo (reservas/bloqueos existentes),
-  // usados solo para advertir de conflictos al elegir fechas en esta pantalla
-  // — no reemplaza la validación autoritativa del backend en POST /reservations.
+  // Bloqueos de disponibilidad del vehículo consultados vía GET
+  // /api/v1/availability/vehicle/{id}/blocks (VehicleService.getAvailabilityBlocks).
+  //
+  // IMPORTANTE (leído directamente del backend — AvailabilityController /
+  // VehicleAvailabilityQueryServiceImpl.findByVehicleId): este endpoint solo
+  // devuelve bloqueos MANUALES del propietario (tabla VehicleAvailability,
+  // ej. mantenimiento/uso personal). NO incluye reservas de otros renters —
+  // no existe ningún endpoint que exponga las reservas de un vehículo por
+  // vehicleId al cliente Flutter (ReservationController solo permite listar
+  // por renterId/ownerId). Por eso esta pantalla NO puede detectar de forma
+  // 100% confiable un choque contra la reserva de otro renter antes de
+  // enviar el POST — para eso ya existe una validación autoritativa en el
+  // backend (ReservationCommandServiceImpl.handle(CreateReservationCommand),
+  // regla RES-02), que responde 409 CONFLICT con mensaje claro si hay
+  // solape; ese mensaje ahora se propaga literal en el catch de
+  // ReservationException en _payAndReserve.
+  //
+  // Esta pantalla SÍ puede bloquear con certeza dos casos con la información
+  // disponible localmente:
+  //  1. Solape contra un bloqueo manual del propietario.
+  //  2. Violación del margen de 1 día de mantenimiento entre el fin de un
+  //     bloqueo/reserva conocido y el inicio de la nueva reserva (regla de
+  //     negocio nueva, no aplicada por el backend).
+  // Por eso el conflicto detectado aquí SÍ bloquea el botón "Pagar y
+  // reservar" (a diferencia del comportamiento anterior, que solo advertía).
   List<AvailabilityBlock> _availabilityBlocks = [];
   bool _loadingAvailability = false;
-  String? _dateConflictWarning;
+  bool _availabilityCheckFailed = false;
+  String? _dateConflictError;
+
+  /// Días de margen que el propietario necesita entre el fin de una reserva/
+  /// bloqueo y el inicio de la siguiente, para inspección y mantenimiento.
+  static const int _maintenanceBufferDays = 0;
 
   _SubmitState _submitState = _SubmitState.idle;
   String? _submitError;
@@ -64,40 +91,72 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
   DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
   Future<void> _loadAvailabilityBlocks() async {
-    setState(() => _loadingAvailability = true);
+    setState(() {
+      _loadingAvailability = true;
+      _availabilityCheckFailed = false;
+    });
     try {
       final blocks = await VehicleService.getAvailabilityBlocks(widget.vehicle.id);
       if (!mounted) return;
       setState(() {
         _availabilityBlocks = blocks;
         _loadingAvailability = false;
+        _availabilityCheckFailed = false;
       });
       _checkDateConflict();
     } catch (_) {
-      // Nice-to-have: si no se puede cargar la disponibilidad, no bloqueamos
-      // el flujo de reserva — el backend sigue siendo la validación autoritativa.
+      // Manejo de error de red consistente con el resto de la pantalla
+      // (_loadCoveragePlans/_recalculateFare): no dejamos al usuario sin
+      // poder reservar nunca por un fallo transitorio, pero tampoco nos
+      // saltamos la validación en silencio — se muestra una advertencia
+      // explícita y se ofrece reintentar antes de permitir continuar.
       if (!mounted) return;
-      setState(() => _loadingAvailability = false);
+      setState(() {
+        _loadingAvailability = false;
+        _availabilityCheckFailed = true;
+        _dateConflictError = null;
+      });
     }
   }
 
-  /// Advierte (no bloquea) si el rango elegido se solapa con un bloqueo o
-  /// reserva existente — la validación real ocurre en el backend al crear
-  /// la reserva (POST /api/v1/reservations), esto es solo feedback temprano.
+  /// Bloquea el botón "Pagar y reservar" si el rango [_startDate, _endDate]
+  /// elegido por el usuario:
+  ///  a) se solapa directamente con un bloqueo/reserva conocido, o
+  ///  b) empieza dentro del margen de mantenimiento de
+  ///     [_maintenanceBufferDays] día(s) después de que termine uno de ellos.
+  ///
+  /// Ejemplo del margen: si un bloqueo existente termina el día 10, el
+  /// próximo `startDate` válido es el día 12 en adelante — el día 11 se
+  /// considera bloqueado como buffer de mantenimiento.
+  ///
+  /// Esta es una validación de mejor esfuerzo hecha con los bloqueos
+  /// manuales visibles localmente (ver comentario en `_availabilityBlocks`);
+  /// la validación final y autoritativa contra reservas de otros renters
+  /// ocurre en el backend al enviar el POST.
   void _checkDateConflict() {
-    final conflict = _availabilityBlocks.any((b) {
+    AvailabilityBlock? conflicting;
+    for (final b in _availabilityBlocks) {
       final blockStart = _dateOnly(b.startDate);
       final blockEnd = _dateOnly(b.endDate);
-      // Comparación inclusiva en ambos extremos: con recogida y devolución en
+      final bufferEnd = blockEnd.add(const Duration(days: _maintenanceBufferDays));
+      // Comparación inclusiva en ambos extremos, extendiendo el fin del
+      // bloqueo con el margen de mantenimiento: con recogida y devolución en
       // el mismo día (rango de ancho cero), el día elegido debe seguir
-      // detectándose como conflicto si cae dentro de un bloqueo existente,
-      // incluyendo si coincide exactamente con blockStart o blockEnd.
-      return !_startDate.isAfter(blockEnd) && !_endDate.isBefore(blockStart);
-    });
+      // detectándose como conflicto si cae dentro del bloqueo existente o de
+      // su margen posterior, incluyendo si coincide exactamente con
+      // blockStart o bufferEnd.
+      final overlapsOrInBuffer = !_startDate.isAfter(bufferEnd) && !_endDate.isBefore(blockStart);
+      if (overlapsOrInBuffer) {
+        conflicting = b;
+        break;
+      }
+    }
+
     setState(() {
-      _dateConflictWarning = conflict
-          ? 'Las fechas elegidas se solapan con una reserva o bloqueo existente de este vehículo. Puedes continuar, pero el backend podría rechazar la reserva.'
-          : null;
+      _dateConflictError = conflicting == null
+          ? null
+          : 'Este vehículo no está disponible en las fechas seleccionadas. '
+              'Ya existe una reserva o mantenimiento del ${_fmt(conflicting.startDate)} al ${_fmt(conflicting.endDate)}.';
     });
   }
 
@@ -191,6 +250,24 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
   Future<void> _payAndReserve() async {
     final fare = _fare;
     if (fare == null) return;
+
+    // Bloqueo duro: si ya detectamos un conflicto de disponibilidad local
+    // (solape o margen de mantenimiento), no se permite continuar. El botón
+    // ya está deshabilitado en este caso, pero se revalida aquí por si el
+    // estado cambiara entre el build y el tap.
+    if (_dateConflictError != null) {
+      await _showAvailabilityBlockedDialog(_dateConflictError!);
+      return;
+    }
+
+    // Si la verificación de disponibilidad falló por red, no bloqueamos
+    // silenciosamente el flujo (el backend sigue validando de forma
+    // autoritativa al crear la reserva), pero sí advertimos explícitamente
+    // y pedimos confirmación explícita antes de continuar.
+    if (_availabilityCheckFailed) {
+      final proceed = await _confirmProceedWithoutAvailabilityCheck();
+      if (!proceed) return;
+    }
 
     setState(() {
       _submitState = _SubmitState.processingPayment;
@@ -318,6 +395,65 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
     }
   }
 
+  /// Diálogo bloqueante: informa el conflicto de disponibilidad detectado y
+  /// no ofrece continuar, solo cerrarlo (el usuario debe cambiar de fechas).
+  Future<void> _showAvailabilityBlockedDialog(String message) {
+    return showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.event_busy, color: Colors.redAccent),
+            SizedBox(width: 8),
+            Expanded(child: Text('Vehículo no disponible')),
+          ],
+        ),
+        content: Text(message, style: const TextStyle(color: Colors.black87)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Elegir otras fechas', style: TextStyle(color: Colors.black)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Diálogo no bloqueante: la verificación de disponibilidad falló por red.
+  /// Se advierte explícitamente y se exige confirmación explícita del
+  /// usuario para continuar, en vez de saltarse la validación en silencio o
+  /// dejarlo sin poder reservar por un fallo transitorio.
+  Future<bool> _confirmProceedWithoutAvailabilityCheck() async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.wifi_off, color: Colors.orange),
+            SizedBox(width: 8),
+            Expanded(child: Text('No se pudo verificar disponibilidad')),
+          ],
+        ),
+        content: const Text(
+          'No pudimos confirmar por conexión que el vehículo esté libre en estas fechas. '
+          'El sistema igual validará la disponibilidad al confirmar la reserva. ¿Deseas continuar?',
+          style: TextStyle(color: Colors.black87),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar', style: TextStyle(color: Colors.black54)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Continuar de todos modos', style: TextStyle(color: Colors.black)),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
   bool get _isSubmitting =>
       _submitState == _SubmitState.processingPayment || _submitState == _SubmitState.creatingReservation;
 
@@ -410,17 +546,41 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
               ],
             ),
           ],
-          if (_dateConflictWarning != null) ...[
+          if (_dateConflictError != null) ...[
             const SizedBox(height: 8),
             Container(
               key: const Key('confirmBooking_dateConflictWarning'),
               padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: Colors.red[50], borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.red.shade200)),
+              child: Row(
+                children: [
+                  const Icon(Icons.event_busy, color: Colors.redAccent, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(_dateConflictError!, style: const TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.w600))),
+                ],
+              ),
+            ),
+          ] else if (_availabilityCheckFailed) ...[
+            const SizedBox(height: 8),
+            Container(
+              key: const Key('confirmBooking_availabilityCheckFailedWarning'),
+              padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.orange.shade200)),
               child: Row(
                 children: [
-                  const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 18),
+                  const Icon(Icons.wifi_off, color: Colors.orange, size: 18),
                   const SizedBox(width: 8),
-                  Expanded(child: Text(_dateConflictWarning!, style: const TextStyle(color: Colors.deepOrange, fontSize: 12))),
+                  const Expanded(
+                    child: Text(
+                      'No se pudo verificar la disponibilidad del vehículo por un problema de conexión.',
+                      style: TextStyle(color: Colors.deepOrange, fontSize: 12),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _loadingAvailability ? null : _loadAvailabilityBlocks,
+                    style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 0)),
+                    child: const Text('Reintentar', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.deepOrange)),
+                  ),
                 ],
               ),
             ),
@@ -495,17 +655,29 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
           SizedBox(
             width: double.infinity, height: 52,
             child: ElevatedButton(
-              onPressed: (_isSubmitting || _fare == null) ? null : _payAndReserve,
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.black, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+              key: const Key('confirmBooking_payButton'),
+              // Bloqueo duro: con un conflicto de disponibilidad detectado
+              // localmente (solape o margen de mantenimiento) el botón queda
+              // deshabilitado y no dispara el flujo de pago/reserva.
+              onPressed: (_isSubmitting || _fare == null || _dateConflictError != null) ? null : _payAndReserve,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.black,
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: Colors.black.withValues(alpha: 0.35),
+                disabledForegroundColor: Colors.white70,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
               child: _isSubmitting
                   ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white))
                   : Text(
-                      _submitState == _SubmitState.reservationFailed
-                          ? 'Reintentar reserva'
-                          : (_submitState == _SubmitState.paymentFailed ||
-                                  _submitState == _SubmitState.paymentAbandoned)
-                              ? 'Reintentar pago'
-                              : 'Pagar y reservar',
+                      _dateConflictError != null
+                          ? 'Vehículo no disponible'
+                          : _submitState == _SubmitState.reservationFailed
+                              ? 'Reintentar reserva'
+                              : (_submitState == _SubmitState.paymentFailed ||
+                                      _submitState == _SubmitState.paymentAbandoned)
+                                  ? 'Reintentar pago'
+                                  : 'Pagar y reservar',
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                     ),
             ),

@@ -115,7 +115,12 @@ class VehicleService {
   }) async {
     final token = await AuthService.getToken();
 
-    final queryParams = {
+    // Nota: 'featureNames' se envía como Map<String, dynamic> con valor
+    // List<String> (no Map<String, String>) porque el backend lo recibe como
+    // @RequestParam List<String> featureNames (Spring), que requiere el mismo
+    // query param repetido una vez por cada nombre (?featureNames=A&featureNames=B),
+    // algo que un Map<String, String> no puede representar (una sola clave).
+    final queryParams = <String, dynamic>{
       'licensePlate': licensePlate,
       'make': make,
       'model': model,
@@ -130,18 +135,13 @@ class VehicleService {
       'fuelType': fuelType,
       if (latitude != null) 'latitude': latitude.toString(),
       if (longitude != null) 'longitude': longitude.toString(),
+      if (featureNames != null && featureNames.isNotEmpty) 'featureNames': featureNames,
     };
 
     final uri = Uri.parse('$baseUrl/vehicles/with-image').replace(queryParameters: queryParams);
 
     final request = http.MultipartRequest('POST', uri);
     if (token != null) request.headers['Authorization'] = 'Bearer $token';
-
-    if (featureNames != null) {
-      for (final f in featureNames) {
-        request.fields['featureNames'] = f;
-      }
-    }
 
     request.files.add(http.MultipartFile.fromBytes('file', imageBytes, filename: imageFilename));
 
@@ -153,6 +153,49 @@ class VehicleService {
     }
 
     String message = 'No se pudo publicar el vehículo';
+    try {
+      final body = jsonDecode(response.body);
+      if (body is Map && (body['message'] != null || body['error'] != null)) {
+        message = (body['message'] ?? body['error']).toString();
+      }
+    } catch (_) {}
+    throw Exception(message);
+  }
+
+  /// POST /api/v1/vehicles/{id}/images/upload — sube una nueva imagen para un
+  /// vehículo ya existente (usado desde edit_vehicle_screen.dart). A diferencia
+  /// de [createVehicle] (que sube la única foto inicial junto con el resto de
+  /// campos), este endpoint es exclusivo para imágenes y admite marcarla como
+  /// principal (`isPrimary`) y su posición (`imageOrder`) vía query params.
+  static Future<void> uploadVehicleImage({
+    required int vehicleId,
+    required Uint8List imageBytes,
+    required String imageFilename,
+    bool? isPrimary,
+    int? imageOrder,
+  }) async {
+    final token = await AuthService.getToken();
+
+    final queryParams = {
+      if (isPrimary != null) 'isPrimary': isPrimary.toString(),
+      if (imageOrder != null) 'imageOrder': imageOrder.toString(),
+    };
+
+    final uri = Uri.parse('$baseUrl/vehicles/$vehicleId/images/upload')
+        .replace(queryParameters: queryParams.isEmpty ? null : queryParams);
+
+    final request = http.MultipartRequest('POST', uri);
+    if (token != null) request.headers['Authorization'] = 'Bearer $token';
+    request.files.add(http.MultipartFile.fromBytes('file', imageBytes, filename: imageFilename));
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return;
+    }
+
+    String message = 'No se pudo subir la imagen';
     try {
       final body = jsonDecode(response.body);
       if (body is Map && (body['message'] != null || body['error'] != null)) {
@@ -352,8 +395,10 @@ class VehicleService {
   /// Devuelve los rangos de fechas bloqueados manualmente por el propietario
   /// (o ya reservados) para un vehículo, para pintar el calendario.
   static Future<List<AvailabilityBlock>> getAvailabilityBlocks(int vehicleId) async {
+    final token = await AuthService.getToken();
     final uri = Uri.parse('$baseUrl/availability/vehicle/$vehicleId/blocks');
-    final response = await http.get(uri);
+    final response = await http.get(uri,       
+    headers: {if (token != null) 'Authorization': 'Bearer $token'},);
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body) as List;
