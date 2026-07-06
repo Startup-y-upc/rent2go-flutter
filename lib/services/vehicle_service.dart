@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import '../models/vehicle_models.dart';
+import '../models/counterparty_data.dart';
 import 'auth_service.dart';
 
 class VehicleService {
@@ -54,6 +55,29 @@ class VehicleService {
       return VehicleData.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
     }
     throw Exception('No se pudo cargar la información del vehículo');
+  }
+
+  /// GET /api/v1/vehicles/{id}/owner-summary — US76 closure (Sprint 5 fixes remaining scope).
+  ///
+  /// Public-safe read: name + verification badges (KYC/DNI/license) + profile photo for the
+  /// vehicle's owner, resolvable BEFORE any reservation exists — closes the pre-booking gap
+  /// that [CounterpartyData] (until now only embedded in ReservationResource/ConversationResource,
+  /// both post-booking) could not fill. Same response shape as those, reused as-is here.
+  ///
+  /// Returns null if the vehicle itself is not found (404) or the response cannot be parsed —
+  /// callers must show an explicit "no verification info available" state, never crash.
+  static Future<CounterpartyData?> getVehicleOwnerSummary(int vehicleId) async {
+    final token = await AuthService.getToken();
+    final uri = Uri.parse('$baseUrl/vehicles/$vehicleId/owner-summary');
+    final response = await http.get(
+      uri,
+      headers: {if (token != null) 'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      return CounterpartyData.tryParse(jsonDecode(response.body));
+    }
+    return null;
   }
 
   /// GET /api/v1/vehicles/categories

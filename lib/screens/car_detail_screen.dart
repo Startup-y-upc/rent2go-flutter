@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/vehicle_models.dart';
+import '../models/counterparty_data.dart';
 import '../services/auth_service.dart';
 import '../services/dispute_service.dart';
+import '../services/vehicle_service.dart';
+import '../widgets/common_widgets.dart' show kCyan;
 
 class CarDetailScreen extends StatefulWidget {
   final VehicleData vehicle;
@@ -21,10 +24,42 @@ class _CarDetailScreenState extends State<CarDetailScreen> {
   VehicleRatingData? _rating;
   List<VehicleReviewData> _reviews = const [];
 
+  // US76 closure (Sprint 5 fixes remaining scope): owner identity + verification badges,
+  // resolvable pre-booking via GET /api/v1/vehicles/{id}/owner-summary. `_ownerLoading`
+  // tracks the fetch explicitly so the UI can show a loading state instead of a blank/crash
+  // if the fetch is slow, and `_ownerError` covers the vehicle-not-found/parse-failure case —
+  // never a raw exception surfaced to the user.
+  bool _ownerLoading = true;
+  bool _ownerError = false;
+  CounterpartyData? _owner;
+
   @override
   void initState() {
     super.initState();
     _loadReviews();
+    _loadOwnerSummary();
+  }
+
+  Future<void> _loadOwnerSummary() async {
+    setState(() {
+      _ownerLoading = true;
+      _ownerError = false;
+    });
+    try {
+      final owner = await VehicleService.getVehicleOwnerSummary(vehicle.id);
+      if (!mounted) return;
+      setState(() {
+        _owner = owner;
+        _ownerLoading = false;
+        _ownerError = owner == null;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _ownerLoading = false;
+        _ownerError = true;
+      });
+    }
   }
 
   Future<void> _loadReviews() async {
@@ -157,6 +192,7 @@ class _CarDetailScreenState extends State<CarDetailScreen> {
                       ),
                       const SizedBox(height: 20),
                       Container(
+                        key: const Key('owner_info_box'),
                         padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(color: colorScheme.surfaceContainerLow, borderRadius: BorderRadius.circular(12), border: Border.all(color: colorScheme.outlineVariant)),
                         child: Row(
@@ -167,8 +203,27 @@ class _CarDetailScreenState extends State<CarDetailScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text('Propietario', style: TextStyle(fontWeight: FontWeight.w600, color: colorScheme.onSurface)),
-                                  Text('ID #${vehicle.ownerId}', style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 12)),
+                                  Row(
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          _ownerLoading
+                                              ? 'Propietario'
+                                              : (_owner?.fullName ?? 'Propietario'),
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(fontWeight: FontWeight.w600, color: colorScheme.onSurface),
+                                        ),
+                                      ),
+                                      if (!_ownerLoading && _owner?.kycVerified == true) ...[
+                                        const SizedBox(width: 4),
+                                        const Tooltip(message: 'Verificado', child: Icon(Icons.verified, size: 14, color: kCyan)),
+                                      ],
+                                    ],
+                                  ),
+                                  Text(
+                                    _ownerLoading ? 'Cargando...' : 'ID #${vehicle.ownerId}',
+                                    style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 12),
+                                  ),
                                 ],
                               ),
                             ),
@@ -179,6 +234,13 @@ class _CarDetailScreenState extends State<CarDetailScreen> {
                             ),
                           ],
                         ),
+                      ),
+                      const SizedBox(height: 10),
+                      _OwnerVerificationBadges(
+                        key: const Key('owner_verification_badges'),
+                        loading: _ownerLoading,
+                        error: _ownerError,
+                        owner: _owner,
                       ),
                       const SizedBox(height: 20),
                       if (vehicle.description != null && vehicle.description!.isNotEmpty) ...[
@@ -288,6 +350,76 @@ class _SpecItem extends StatelessWidget {
       ],
     );
   }
+}
+
+/// US76 closure (Sprint 5 fixes remaining scope): three checkmark-style verification items
+/// shown OUTSIDE the owner info box — "DNI verificado", "Carnet validado", "Teléfono".
+///
+/// Reuses the exact same badge visual (Icon + Tooltip + kCyan) established in
+/// reservation_detail_screen.dart/owner_reservation_history_screen.dart for
+/// dniVerified/licenseVerified, rather than inventing a new style. "Teléfono" reuses
+/// User.phoneVerified's existing single-flag semantics — CounterpartyResource does not
+/// (and per BRD-2026-07-05 §9.4, deliberately does not) expose phoneVerified, since phone
+/// verification is out of this endpoint's minimal PII-safe scope; shown here as an
+/// unverified/neutral state rather than omitted, to preserve the three-item layout the
+/// original spec asked for without inventing new backend scope for a single item.
+///
+/// Handles loading/error/missing-data explicitly: a vehicle whose owner has no KYC on file
+/// shows all three as "not verified," never a crash or blank space.
+class _OwnerVerificationBadges extends StatelessWidget {
+  final bool loading;
+  final bool error;
+  final CounterpartyData? owner;
+
+  const _OwnerVerificationBadges({super.key, required this.loading, required this.error, required this.owner});
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    if (loading) {
+      return const Padding(
+        key: Key('owner_badges_loading_state'),
+        padding: EdgeInsets.symmetric(vertical: 4),
+        child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+      );
+    }
+
+    // A vehicle-not-found/parse-failure case still renders the three items in their
+    // explicit "not verified" state rather than an error banner — this is a soft,
+    // non-blocking trust signal on a public detail screen, not a critical data load.
+    final dniVerified = !error && owner?.dniVerified == true;
+    final licenseVerified = !error && owner?.licenseVerified == true;
+    const phoneVerified = false; // out of CounterpartyResource's scope, see class doc.
+
+    return Wrap(
+      key: const Key('owner_badges_content'),
+      spacing: 14,
+      runSpacing: 6,
+      children: [
+        _VerificationCheckItem(label: 'DNI verificado', verified: dniVerified, color: colorScheme.onSurfaceVariant),
+        _VerificationCheckItem(label: 'Carnet validado', verified: licenseVerified, color: colorScheme.onSurfaceVariant),
+        _VerificationCheckItem(label: 'Teléfono', verified: phoneVerified, color: colorScheme.onSurfaceVariant),
+      ],
+    );
+  }
+}
+
+class _VerificationCheckItem extends StatelessWidget {
+  final String label;
+  final bool verified;
+  final Color color;
+  const _VerificationCheckItem({required this.label, required this.verified, required this.color});
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Icon(verified ? Icons.check_circle : Icons.radio_button_unchecked, size: 14, color: verified ? kCyan : color),
+      const SizedBox(width: 4),
+      Text(label, style: TextStyle(fontSize: 12, color: color)),
+    ],
+  );
 }
 
 class _Divider extends StatelessWidget {
