@@ -102,27 +102,6 @@ class MessageService {
     throw Exception('No se pudo enviar el mensaje');
   }
 
-  static Future<int> getUnreadCount(int conversationId, int myUserId) async {
-    try {
-      final messages = await getMessages(conversationId);
-      return messages.where((m) => m.senderId != myUserId && (m.readAt == null || m.readAt!.isEmpty)).length;
-    } catch (_) {
-      return 0;
-    }
-  }
-
-  static Future<int> getTotalUnreadCount(int userId) async {
-    try {
-      final conversations = await getUserConversations(userId);
-      final counts = await Future.wait(
-        conversations.map((c) => getUnreadCount(c.id, userId)),
-      );
-      return counts.fold<int>(0, (sum, c) => sum + c);
-    } catch (_) {
-      return 0;
-    }
-  }
-
   static Future<void> closeConversation(int conversationId, int userId) async {
     final token = await AuthService.getToken();
     final uri = Uri.parse('$baseUrl/community-trust/conversations/$conversationId/close?userId=$userId');
@@ -130,5 +109,54 @@ class MessageService {
       uri,
       headers: {if (token != null) 'Authorization': 'Bearer $token'},
     );
+  }
+
+  /// Whether [userId] has any conversation with activity newer than the last
+  /// time they opened the Messages screen. Replaces the old N+1 unread-count
+  /// logic (one GET .../messages call per conversation just to count unread
+  /// items client-side): the conversations list endpoint already returns
+  /// `lastMessageAt` for free, so this only needs the single list call plus a
+  /// local timestamp comparison — no per-conversation message fetch, no
+  /// numeric count, just "is there something new".
+  static Future<bool> hasRecentActivity(int userId) async {
+    try {
+      final conversations = await getUserConversations(userId);
+      final lastOpened = await UnreadIndicatorStore.getLastOpenedAt(userId);
+      if (lastOpened == null) {
+        // Never opened Messages before: show the dot if any conversation has
+        // ever had a message, otherwise there is nothing new to flag.
+        return conversations.any((c) => c.lastMessageAt != null && c.lastMessageAt!.isNotEmpty);
+      }
+      for (final c in conversations) {
+        final iso = c.lastMessageAt;
+        if (iso == null || iso.isEmpty) continue;
+        final ts = DateTime.tryParse(iso);
+        if (ts != null && ts.isAfter(lastOpened)) return true;
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+}
+
+/// Persists, per user, the last time the Messages screen was opened so the
+/// unread activity dot can be derived from `ConversationData.lastMessageAt`
+/// without any additional network call.
+class UnreadIndicatorStore {
+  static const _boxName = 'messages_unread_indicator';
+
+  static Future<Box> _box() => Hive.openBox(_boxName);
+
+  static Future<DateTime?> getLastOpenedAt(int userId) async {
+    final box = await _box();
+    final iso = box.get('last_opened_$userId') as String?;
+    if (iso == null) return null;
+    return DateTime.tryParse(iso);
+  }
+
+  static Future<void> markOpenedNow(int userId) async {
+    final box = await _box();
+    await box.put('last_opened_$userId', DateTime.now().toUtc().toIso8601String());
   }
 }

@@ -69,7 +69,7 @@ Future<VehicleFilters?> showVehicleFilterSheet(
   return showModalBottomSheet<VehicleFilters>(
     context: context,
     isScrollControlled: true,
-    backgroundColor: Colors.white,
+    backgroundColor: Color(0xFF0D0D1A),
     shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
     builder: (_) => _VehicleFilterSheetContent(initialFilters: initialFilters),
   );
@@ -119,7 +119,7 @@ class _VehicleFilterSheetContentState extends State<_VehicleFilterSheetContent> 
     // against this sheet's white background (and inverted badly in dark mode).
     // Deriving explicit theme colors here fixes contrast in both themes.
     final inputTextStyle = TextStyle(color: colorScheme.onSurface);
-    final labelStyle = TextStyle(color: Colors.black);
+    final labelStyle = TextStyle(color: Colors.white);
     final inputDecorationTheme = InputDecorationTheme(
       labelStyle: labelStyle,
       hintStyle: labelStyle,

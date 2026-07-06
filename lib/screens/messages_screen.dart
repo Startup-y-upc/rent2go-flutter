@@ -13,10 +13,9 @@ class MessagesScreen extends StatefulWidget {
 }
 
 class _MessagesScreenState extends State<MessagesScreen> {
-  int _filter = 0; // 0=Todos 1=Activos 2=Sin leer
+  int _filter = 0; // 0=Todos 1=Activos
   List<ConversationData> _conversations = [];
 
-  Map<int, int> _unreadCounts = {};
   int? _myUserId;
   bool _loading = true;
   String? _errorMsg;
@@ -42,29 +41,16 @@ class _MessagesScreenState extends State<MessagesScreen> {
       final convs = await MessageService.getUserConversations(_myUserId!);
       convs.sort((a, b) => (b.lastMessageAt ?? b.createdAt).compareTo(a.lastMessageAt ?? a.createdAt));
       if (mounted) setState(() { _conversations = convs; _loading = false; });
-      _loadUnreadCounts(convs);
+      // Entering the Messages screen means the user has now seen the latest
+      // activity — record it so the nav-bar dot clears without any extra call.
+      await UnreadIndicatorStore.markOpenedNow(_myUserId!);
     } catch (e) {
       if (mounted) setState(() { _loading = false; _errorMsg = 'No se pudieron cargar tus mensajes.'; });
     }
   }
 
-  /// US71 — fetched separately from the conversation list itself (which never
-  /// carries unread counts) so a slow/failed unread-count fetch never blocks
-  /// showing the conversation list.
-  Future<void> _loadUnreadCounts(List<ConversationData> convs) async {
-    if (_myUserId == null) return;
-    final myId = _myUserId!;
-    final entries = await Future.wait(convs.map((c) async {
-      final count = await MessageService.getUnreadCount(c.id, myId);
-      return MapEntry(c.id, count);
-    }));
-    if (mounted) setState(() => _unreadCounts = Map.fromEntries(entries));
-  }
-
   List<ConversationData> get _filtered {
     if (_filter == 1) return _conversations.where((c) => c.status.toUpperCase() == 'OPEN' || c.status.toUpperCase() == 'ACTIVE').toList();
-    // US71 — "Sin leer" now reflects real unread counts (was a no-op stub).
-    if (_filter == 2) return _conversations.where((c) => (_unreadCounts[c.id] ?? 0) > 0).toList();
     return _conversations;
   }
 
@@ -128,7 +114,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Row(
-                children: ['Todos', 'Activos', 'Sin leer'].asMap().entries.map((e) => Padding(
+                children: ['Todos', 'Activos'].asMap().entries.map((e) => Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: GestureDetector(
                     onTap: () => setState(() => _filter = e.key),
@@ -173,7 +159,6 @@ class _MessagesScreenState extends State<MessagesScreen> {
                                   final iAmOwner = c.ownerId == _myUserId;
                                   final otherLabel = iAmOwner ? c.renterDisplayName : c.ownerDisplayName;
                                   final otherPhoto = (iAmOwner ? c.renter : c.owner)?.profileImageUrl;
-                                  final unread = _unreadCounts[c.id] ?? 0;
                                   return ListTile(
                                     key: Key('conversation_tile_${c.id}'),
                                     contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -211,20 +196,6 @@ class _MessagesScreenState extends State<MessagesScreen> {
                                         ),
                                       ],
                                     ),
-                                    // US72 — numeric unread-count badge (WCAG: not color-only).
-                                    trailing: unread > 0
-                                        ? Container(
-                                            key: Key('conversation_unread_badge_${c.id}'),
-                                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                                            decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(12)),
-                                            constraints: const BoxConstraints(minWidth: 22),
-                                            child: Text(
-                                              unread > 99 ? '99+' : '$unread',
-                                              textAlign: TextAlign.center,
-                                              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                                            ),
-                                          )
-                                        : null,
                                     onTap: () => _openChat(c),
                                   );
                                 },

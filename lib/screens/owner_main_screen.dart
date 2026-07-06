@@ -19,19 +19,22 @@ class _OwnerMainScreenState extends State<OwnerMainScreen> {
   int _currentIndex = 0;
   bool _showEarningsInsideProfile = false;
 
-  int _unreadTotal = 0;
+  // Simple activity dot, not a numeric count — see BottomNavBar in
+  // explore_screen.dart for the full rationale (avoids the N+1 fetch of every
+  // conversation's full message history just to count unread items).
+  bool _hasActivity = false;
 
   @override
   void initState() {
     super.initState();
-    _loadUnreadTotal();
+    _loadActivity();
   }
 
-  Future<void> _loadUnreadTotal() async {
+  Future<void> _loadActivity() async {
     final me = await AuthService.getCurrentUser();
     if (me == null) return;
-    final total = await MessageService.getTotalUnreadCount(me.userId);
-    if (mounted) setState(() => _unreadTotal = total);
+    final hasActivity = await MessageService.hasRecentActivity(me.userId);
+    if (mounted) setState(() => _hasActivity = hasActivity);
   }
 
   @override
@@ -100,19 +103,13 @@ class _OwnerMainScreenState extends State<OwnerMainScreen> {
             clipBehavior: Clip.none,
             children: [
               Icon(isActive ? activeIcon : icon, color: isActive ? kCyan : Colors.grey, size: 24),
-              if (isMessagesTab && _unreadTotal > 0)
+              if (isMessagesTab && _hasActivity)
                 Positioned(
-                  right: -8, top: -4,
+                  right: -2, top: -2,
                   child: Container(
-                    key: const Key('owner_bottom_nav_messages_unread_badge'),
-                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                    constraints: const BoxConstraints(minWidth: 16),
-                    decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(10)),
-                    child: Text(
-                      _unreadTotal > 99 ? '99+' : '$_unreadTotal',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
-                    ),
+                    key: const Key('owner_bottom_nav_messages_unread_dot'),
+                    width: 8, height: 8,
+                    decoration: const BoxDecoration(color: kCyan, shape: BoxShape.circle),
                   ),
                 ),
             ],

@@ -554,23 +554,25 @@ class BottomNavBar extends StatefulWidget {
 }
 
 class _BottomNavBarState extends State<BottomNavBar> {
-  // US72 — numeric unread-count badge on the "Mensajes" tab icon (WCAG: not
-  // color-only). Loaded once per BottomNavBar mount; messages_screen.dart's own
-  // per-conversation counts are the source of truth when the user is actually
-  // on that screen, this is just the passive nav-level indicator.
-  int _unreadTotal = 0;
+  // Simple activity dot on the "Mensajes" tab icon: no numeric count (that
+  // required an N+1 fetch of every conversation's full message history just
+  // to count unread items client-side). Instead this compares each
+  // conversation's lastMessageAt (already returned by the conversations list
+  // call, no extra request) against the last time the user opened Messages
+  // locally. Shows a plain dot if something is newer, nothing otherwise.
+  bool _hasActivity = false;
 
   @override
   void initState() {
     super.initState();
-    _loadUnreadTotal();
+    _loadActivity();
   }
 
-  Future<void> _loadUnreadTotal() async {
+  Future<void> _loadActivity() async {
     final me = await AuthService.getCurrentUser();
     if (me == null) return;
-    final total = await MessageService.getTotalUnreadCount(me.userId);
-    if (mounted) setState(() => _unreadTotal = total);
+    final hasActivity = await MessageService.hasRecentActivity(me.userId);
+    if (mounted) setState(() => _hasActivity = hasActivity);
   }
 
   @override
@@ -602,19 +604,13 @@ class _BottomNavBarState extends State<BottomNavBar> {
                         clipBehavior: Clip.none,
                         children: [
                           Icon(e.value.$1, color: active ? kCyan : Colors.grey, size: 22),
-                          if (isMessagesTab && _unreadTotal > 0)
+                          if (isMessagesTab && _hasActivity)
                             Positioned(
-                              right: -8, top: -4,
+                              right: -2, top: -2,
                               child: Container(
-                                key: const Key('bottom_nav_messages_unread_badge'),
-                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                constraints: const BoxConstraints(minWidth: 16),
-                                decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(10)),
-                                child: Text(
-                                  _unreadTotal > 99 ? '99+' : '$_unreadTotal',
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
-                                ),
+                                key: const Key('bottom_nav_messages_unread_dot'),
+                                width: 8, height: 8,
+                                decoration: const BoxDecoration(color: kCyan, shape: BoxShape.circle),
                               ),
                             ),
                         ],
