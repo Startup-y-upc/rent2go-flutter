@@ -593,6 +593,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         onTap: () => context.push('/notifications'),
                       ),
                       const Divider(height: 1),
+                      _OptionRow(
+                        icon: Icons.favorite_border,
+                        label: 'Mis favoritos',
+                        onTap: () => context.push('/favorites'),
+                      ),
+                      const Divider(height: 1),
                       const _OptionRow(icon: Icons.lock_outline, label: 'Privacidad'),
                       const Divider(height: 1),
                       _OptionRow(

@@ -27,6 +27,7 @@ import 'screens/rate_reservation_screen.dart';
 import 'screens/withdrawal_history_screen.dart';
 import 'screens/notifications_screen.dart';
 import 'screens/terms_screen.dart';
+import 'screens/favorites_screen.dart';
 import 'services/auth_service.dart';
 import 'models/vehicle_models.dart';
 
@@ -79,7 +80,7 @@ class Rent2GoApp extends StatelessWidget {
   }
 }
 
-const _renterPaths = ['/home', '/bookings', '/messages', '/profile', '/car-detail', '/confirm-booking'];
+const _renterPaths = ['/home', '/bookings', '/messages', '/profile', '/car-detail', '/confirm-booking', '/favorites'];
 const _ownerPaths = ['/owner'];
 // Rutas compartidas por ambos roles (no se redirigen): '/reservation-detail',
 // '/chat', '/verify-identity' — se abren tanto desde pantallas de renter como
@@ -119,6 +120,7 @@ final _router = GoRouter(
     GoRoute(path: '/bookings', builder: (_, __) => const BookingsScreen()),
     GoRoute(path: '/messages', builder: (_, __) => const MessagesScreen()),
     GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
+    GoRoute(path: '/favorites', builder: (_, __) => const FavoritesScreen()),
     GoRoute(
       path: '/car-detail',
       builder: (context, state) => CarDetailScreen(vehicle: state.extra as VehicleData),

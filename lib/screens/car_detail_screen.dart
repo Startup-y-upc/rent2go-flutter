@@ -5,6 +5,7 @@ import '../models/vehicle_models.dart';
 import '../models/counterparty_data.dart';
 import '../services/auth_service.dart';
 import '../services/dispute_service.dart';
+import '../services/favorite_service.dart';
 import '../services/vehicle_service.dart';
 import '../widgets/common_widgets.dart' show kCyan;
 
@@ -33,11 +34,83 @@ class _CarDetailScreenState extends State<CarDetailScreen> {
   bool _ownerError = false;
   CounterpartyData? _owner;
 
+  // Bug 2 (Sprint 5 fixes) — favorite toggle backed by the real backend
+  // endpoint (FavoritesController, /api/v1/favorites). `_favoriteLoading`
+  // covers the initial "is this already a favorite?" check so the icon
+  // doesn't flash filled->empty; `_favoriteBusy` guards the toggle itself
+  // against double-taps while the optimistic update is in flight.
+  bool _favorite = false;
+  bool _favoriteLoading = true;
+  bool _favoriteBusy = false;
+  int? _currentUserId;
+
   @override
   void initState() {
     super.initState();
     _loadReviews();
     _loadOwnerSummary();
+    _loadFavoriteStatus();
+  }
+
+  Future<void> _loadFavoriteStatus() async {
+    final me = await AuthService.getCurrentUser();
+    final userId = me?.userId;
+    if (userId == null || userId == 0) {
+      if (!mounted) return;
+      setState(() {
+        _currentUserId = null;
+        _favoriteLoading = false;
+      });
+      return;
+    }
+    try {
+      final isFav = await FavoriteService.isFavorite(userId: userId, vehicleId: vehicle.id);
+      if (!mounted) return;
+      setState(() {
+        _currentUserId = userId;
+        _favorite = isFav;
+        _favoriteLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _currentUserId = userId;
+        _favoriteLoading = false;
+      });
+    }
+  }
+
+  Future<void> _toggleFavorite() async {
+    final userId = _currentUserId;
+    if (userId == null || _favoriteBusy) return;
+
+    final previous = _favorite;
+    setState(() {
+      _favorite = !previous;
+      _favoriteBusy = true;
+    });
+
+    try {
+      if (_favorite) {
+        await FavoriteService.addFavorite(userId: userId, vehicleId: vehicle.id);
+      } else {
+        await FavoriteService.removeFavorite(userId: userId, vehicleId: vehicle.id);
+      }
+      if (!mounted) return;
+      setState(() => _favoriteBusy = false);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _favorite = previous;
+        _favoriteBusy = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No se pudo actualizar favoritos. Intenta de nuevo.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    }
   }
 
   Future<void> _loadOwnerSummary() async {
@@ -115,12 +188,10 @@ class _CarDetailScreenState extends State<CarDetailScreen> {
       // white/light background instead of trusting the global dark ColorScheme
       // — this screen must match that established convention.
       backgroundColor: Colors.white,
-      body: Stack(
-        children: [
-          SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+      body: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
                 Stack(
                   children: [
                     vehicle.primaryImageUrl != null && vehicle.primaryImageUrl!.isNotEmpty
@@ -149,8 +220,15 @@ class _CarDetailScreenState extends State<CarDetailScreen> {
                       ),
                     ),
                     Positioned(top: 48, left: 16, child: _CircleBtn(icon: Icons.arrow_back, onTap: () => context.pop())),
-                    Positioned(top: 48, right: 56, child: _CircleBtn(icon: Icons.share_outlined, onTap: () {})),
-                    Positioned(top: 48, right: 16, child: _CircleBtn(icon: Icons.favorite_border, onTap: () {})),
+                    Positioned(
+                      top: 48, right: 16,
+                      child: _CircleBtn(
+                        key: const Key('car_detail_favorite_button'),
+                        icon: _favorite ? Icons.favorite : Icons.favorite_border,
+                        iconColor: _favorite ? Colors.redAccent : null,
+                        onTap: _favoriteLoading || _currentUserId == null ? null : _toggleFavorite,
+                      ),
+                    ),
                   ],
                 ),
                 Padding(
@@ -261,41 +339,49 @@ class _CarDetailScreenState extends State<CarDetailScreen> {
                         reviews: _reviews,
                         onRetry: _loadReviews,
                       ),
-                      const SizedBox(height: 100),
+                      const SizedBox(height: 20),
                     ],
                   ),
                 ),
               ],
             ),
           ),
-          Positioned(
-            bottom: 0, left: 0, right: 0,
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
-              decoration: BoxDecoration(color: colorScheme.surface, border: Border(top: BorderSide(color: colorScheme.outlineVariant))),
-              child: Row(
+      // Bug 1 fix (Sprint 5 fixes): this bar used to be a `Positioned` widget
+      // stacked over the scrolling body with a hardcoded `bottom: 28` padding
+      // guess at the home indicator/gesture bar — it floated with extra dead
+      // space on devices with a shorter safe-area inset (most Android phones)
+      // and could still clip under the home indicator on devices with a
+      // taller one. Using `Scaffold.bottomNavigationBar` anchors it correctly
+      // below the body on every device by construction, and wrapping it in
+      // `SafeArea` (top: false, since only the bottom inset matters here)
+      // reserves exactly the real inset — the iOS home indicator or the
+      // Android 3-button/gesture nav bar — instead of a guessed constant.
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+          decoration: BoxDecoration(color: colorScheme.surface, border: Border(top: BorderSide(color: colorScheme.outlineVariant))),
+          child: Row(
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text('S/ ${vehicle.dailyPrice.toInt()}/día', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: colorScheme.onSurface)),
-                      Text('2 días · Total S/${(vehicle.dailyPrice * 2).toInt()}', style: TextStyle(color: colorScheme.onSurface, fontSize: 12)),
-                    ],
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () => context.push('/confirm-booking', extra: vehicle),
-                      style: ElevatedButton.styleFrom(backgroundColor: colorScheme.primary, foregroundColor: colorScheme.onPrimary, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-                      child: const Text('Reservar', style: TextStyle(fontWeight: FontWeight.bold)),
-                    ),
-                  ),
+                  Text('S/ ${vehicle.dailyPrice.toInt()}/día', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: colorScheme.onSurface)),
+                  Text('2 días · Total S/${(vehicle.dailyPrice * 2).toInt()}', style: TextStyle(color: colorScheme.onSurface, fontSize: 12)),
                 ],
               ),
-            ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () => context.push('/confirm-booking', extra: vehicle),
+                  style: ElevatedButton.styleFrom(backgroundColor: colorScheme.primary, foregroundColor: colorScheme.onPrimary, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                  child: const Text('Reservar', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -303,14 +389,15 @@ class _CarDetailScreenState extends State<CarDetailScreen> {
 
 class _CircleBtn extends StatelessWidget {
   final IconData icon;
-  final VoidCallback onTap;
-  const _CircleBtn({required this.icon, required this.onTap});
+  final VoidCallback? onTap;
+  final Color? iconColor;
+  const _CircleBtn({super.key, required this.icon, required this.onTap, this.iconColor});
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return GestureDetector(
       onTap: onTap,
-      child: Container(width: 36, height: 36, decoration: BoxDecoration(color: colorScheme.surface, borderRadius: BorderRadius.circular(18)), child: Icon(icon, size: 18, color: colorScheme.onSurface)),
+      child: Container(width: 36, height: 36, decoration: BoxDecoration(color: colorScheme.surface, borderRadius: BorderRadius.circular(18)), child: Icon(icon, size: 18, color: iconColor ?? colorScheme.onSurface)),
     );
   }
 }
@@ -487,7 +574,7 @@ class _ReviewTile extends StatelessWidget {
               if (review.comment != null && review.comment!.trim().isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 2),
-                  child: Text(review.comment!, style: TextStyle(fontSize: 12, color: Colors.black)),
+                  child: Text(review.comment!, style: TextStyle(fontSize: 12, color: colorScheme.onSurface)),
                 ),
             ],
           ),
