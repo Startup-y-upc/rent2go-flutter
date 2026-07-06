@@ -29,8 +29,17 @@ dev_dependencies:
   hive_generator: ^2.0.1
   build_runner: ^2.4.8
   flutter_lints: ^3.0.0
+  flutter_launcher_icons: ^0.14.2
 
 flutter:
   uses-material-design: true
   assets:
     - assets/legal/terms-and-conditions.md
+
+flutter_launcher_icons:
+  android: true
+  ios: false # no ios/ platform folder exists in this project; enable once `flutter create --platforms=ios .` is run
+  image_path: "assets/rent2go_icon_flat.png"
+  min_sdk_android: 21
+  adaptive_icon_background: "#006AFF"
+  adaptive_icon_foreground: "assets/rent2go_icon_flat.png"
