@@ -27,6 +27,7 @@ import 'screens/rate_reservation_screen.dart';
 import 'screens/withdrawal_history_screen.dart';
 import 'screens/notifications_screen.dart';
 import 'screens/terms_screen.dart';
+import 'screens/help_screen.dart';
 import 'screens/favorites_screen.dart';
 import 'services/auth_service.dart';
 import 'models/vehicle_models.dart';
@@ -91,7 +92,7 @@ final _router = GoRouter(
     final prefs = await SharedPreferences.getInstance();
     final loggedIn = prefs.getBool('is_logged_in') ?? false;
     final path = state.uri.path;
-    final publicPaths = ['/login', '/register', '/account-type', '/validate', '/recover', '/terms'];
+    final publicPaths = ['/login', '/register', '/account-type', '/validate', '/recover', '/terms', '/help'];
 
     if (!loggedIn) {
       if (!publicPaths.any((p) => path.startsWith(p))) return '/login';
@@ -175,5 +176,6 @@ final _router = GoRouter(
     GoRoute(path: '/notifications', builder: (_, __) => const NotificationsScreen()),
 
     GoRoute(path: '/terms', builder: (_, __) => const TermsScreen()),
+    GoRoute(path: '/help', builder: (_, __) => const HelpScreen()),
   ],
 );

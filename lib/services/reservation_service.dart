@@ -1,7 +1,27 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
 import 'auth_service.dart';
 import '../models/counterparty_data.dart';
+
+/// Formatea un timestamp ISO 8601 crudo del backend (ej.
+/// "2026-07-10T14:00:00.000Z") a un string legible en hora local
+/// (ej. "10/07/2026 14:00"), consistente con el formato dd/MM/yyyy ya usado
+/// en availability_screen.dart. Convierte a hora local antes de formatear
+/// porque el backend envía las fechas de reserva en UTC.
+///
+/// Usado por reservation_detail_screen.dart, bookings_screen.dart,
+/// owner_dashboard_screen.dart y owner_reservation_history_screen.dart para
+/// evitar mostrar el string ISO crudo en la UI. Si el string no es una fecha
+/// válida, se devuelve tal cual para no ocultar datos inesperados del backend.
+final DateFormat _reservationDateTimeFormat = DateFormat('dd/MM/yyyy HH:mm');
+
+String formatReservationDateTime(String rawIsoDate) {
+  if (rawIsoDate.isEmpty) return rawIsoDate;
+  final parsed = DateTime.tryParse(rawIsoDate);
+  if (parsed == null) return rawIsoDate;
+  return _reservationDateTimeFormat.format(parsed.toLocal());
+}
 
 /// ReservationResource exacto devuelto por el backend
 /// (ReservationController.java — campos verificados directamente).

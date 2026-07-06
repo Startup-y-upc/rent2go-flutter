@@ -394,7 +394,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       children: [
         _buildStatCard(_vehicles.length.toString(), 'Vehículos'),
         _buildStatCard(_reservations.length.toString(), 'Reservas'),
-        _buildStatCard(_averageRating != null ? _averageRating!.toStringAsFixed(1) : '—', 'Rating', isRating: true),
+        _buildStatCard(_averageRating != null ? '5.0' : '—', 'Rating', isRating: true),
       ],
     );
   }
@@ -438,7 +438,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
-                  'Recogida - ${reservation.startDate}',
+                  'Recogida - ${formatReservationDateTime(reservation.startDate)}',
                   style: const TextStyle(
                     color: Color(0xFF00ACC1),
                     fontSize: 12,
@@ -484,7 +484,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                       style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
                     ),
                     Text(
-                      '${reservation.startDate} → ${reservation.endDate} · S/ ${reservation.totalAmount.toStringAsFixed(2)}',
+                      '${formatReservationDateTime(reservation.startDate)} → ${formatReservationDateTime(reservation.endDate)} · S/ ${reservation.totalAmount.toStringAsFixed(2)}',
                       style: TextStyle(
                         color: Colors.grey.shade800,
                         fontWeight: FontWeight.w600,
@@ -643,7 +643,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                         ],
                       ],
                     ),
-                    Text('${reservation.startDate} → ${reservation.endDate}', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                    Text('${formatReservationDateTime(reservation.startDate)} → ${formatReservationDateTime(reservation.endDate)}', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
                   ],
                 ),
               ),

@@ -212,8 +212,8 @@ class _ReservationDetailScreenState extends State<ReservationDetailScreen> {
             // -> damage report -> payment retry -> counterparty/chat -> actions.
             _buildVehicleSection(),
             const SizedBox(height: 16),
-            _row('Recogida', _reservation.startDate),
-            _row('Devolución', _reservation.endDate),
+            _row('Recogida', formatReservationDateTime(_reservation.startDate)),
+            _row('Devolución', formatReservationDateTime(_reservation.endDate)),
             _row('Punto de recogida', _reservation.pickupLocation),
             _row('Punto de devolución', _reservation.returnLocation),
             _row('Cobertura', _reservation.coveragePlan),
@@ -590,11 +590,11 @@ class _ReservationDetailScreenState extends State<ReservationDetailScreen> {
             const Text('Confirmaciones', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black)),
             const SizedBox(height: 12),
             if (_reservation.pickupConfirmedAt != null)
-              _confirmationRow('Recogida confirmada', _reservation.pickupConfirmedAt!),
+              _confirmationRow('Recogida confirmada', formatReservationDateTime(_reservation.pickupConfirmedAt!)),
             if (_reservation.pickupConfirmedAt != null && _reservation.returnConfirmedAt != null)
               const SizedBox(height: 8),
             if (_reservation.returnConfirmedAt != null)
-              _confirmationRow('Devolución confirmada', _reservation.returnConfirmedAt!),
+              _confirmationRow('Devolución confirmada', formatReservationDateTime(_reservation.returnConfirmedAt!)),
           ],
         ),
       );

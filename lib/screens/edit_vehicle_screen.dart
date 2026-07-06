@@ -545,7 +545,7 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
                           return FilterChip(
                             label: Text(f.name),
                             selected: selected,
-                            selectedColor: kCyan.withValues(alpha: 0.2),
+                            selectedColor: kCyan,
                             checkmarkColor: Colors.black,
                             labelStyle: const TextStyle(color: Colors.black87, fontSize: 13),
                             backgroundColor: Colors.white,

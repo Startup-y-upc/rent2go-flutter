@@ -221,6 +221,86 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
     }
   }
 
+  /// Copy educativo estático por plan, usado solo como respaldo cuando el
+  /// backend no trae `description` (campo vacío) para el plan. Cuando el
+  /// backend sí trae descripción, esa es la que se muestra (ver el `Text`
+  /// que consume este método) — este texto nunca sustituye datos reales de
+  /// la API (nombre/deducible/precio), solo el copy narrativo del plan.
+  String _coverageFallbackDescription(String code) {
+    switch (code) {
+      case 'NONE':
+        return 'Sin protección adicional: asumes el 100% del costo ante daños, pérdida o robo.';
+      case 'BASIC':
+        return 'Responsabilidad civil y daños menores. Pagas un deducible; el resto lo cubre la aseguradora.';
+      case 'STANDARD':
+        return 'Responsabilidad civil, colisión y robo, con un deducible reducido frente al plan Básico.';
+      case 'PREMIUM':
+        return 'Cobertura integral: responsabilidad civil, colisión, robo y asistencia en carretera, sin deducible.';
+      default:
+        return 'Protección adicional durante el alquiler, sujeta a los términos del plan.';
+    }
+  }
+
+  /// Bottom sheet con la explicación general de cómo funciona la cobertura,
+  /// para el ícono de información (i) junto al encabezado "Cobertura".
+  void _showCoverageInfoSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text('¿Qué significa la cobertura?', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.of(sheetContext).pop(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'El plan de cobertura no es el seguro completo del vehículo: es una '
+                  'protección adicional y opcional que se contrata junto con la reserva, '
+                  'válida solo durante el período del alquiler.\n\n'
+                  'Pagas un monto extra por día (según el plan) sumado al precio del '
+                  'alquiler. Si ocurre un accidente, robo o daño, el plan determina cuánto '
+                  'pagas tú de tu bolsillo (deducible) y cuánto cubre la aseguradora o la '
+                  'plataforma.\n\n'
+                  'Para el propietario, esto reduce su riesgo al prestar el vehículo, ya que '
+                  'los costos de incidentes cubiertos los asume la aseguradora/plataforma en '
+                  'vez de tener que reclamarte el monto completo directamente.',
+                  style: TextStyle(fontSize: 14, height: 1.5, color: Colors.black87),
+                ),
+                const SizedBox(height: 16),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    key: const Key('confirmBooking_coverageInfoMoreLink'),
+                    onPressed: () {
+                      Navigator.of(sheetContext).pop();
+                      context.push('/help');
+                    },
+                    child: const Text('Ver más en Ayuda'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _recalculateFare() async {
     if (_coverages.isEmpty) return;
     setState(() => _calculating = true);
@@ -586,8 +666,22 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
             ),
           ],
           const SizedBox(height: 20),
-          const Text('Cobertura', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black)),
-          const SizedBox(height: 12),
+          Row(
+            children: [
+              const Text('Cobertura', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black)),
+              const SizedBox(width: 4),
+              InkWell(
+                key: const Key('confirmBooking_coverageInfoButton'),
+                borderRadius: BorderRadius.circular(20),
+                onTap: () => _showCoverageInfoSheet(context),
+                child: const Padding(
+                  padding: EdgeInsets.all(6),
+                  child: Icon(Icons.info_outline, size: 18, color: Colors.grey),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
           ..._coverages.asMap().entries.map((e) => Padding(
             padding: const EdgeInsets.only(bottom: 10),
             child: GestureDetector(
@@ -609,7 +703,12 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(e.value.name, style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.black)),
-                          Text(e.value.description, style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                          Text(
+                            e.value.description.isNotEmpty
+                                ? e.value.description
+                                : _coverageFallbackDescription(e.value.code),
+                            style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                          ),
                         ],
                       ),
                     ),

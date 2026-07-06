@@ -311,9 +311,9 @@ class _ActiveBookingCard extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               children: [
-                _DateChip(label: 'Recoge', date: reservation.startDate),
+                _DateChip(label: 'Recoge', date: formatReservationDateTime(reservation.startDate)),
                 Expanded(child: Container(height: 1, margin: const EdgeInsets.symmetric(horizontal: 8), color: Colors.white24)),
-                _DateChip(label: 'Devuelve', date: reservation.endDate),
+                _DateChip(label: 'Devuelve', date: formatReservationDateTime(reservation.endDate)),
               ],
             ),
           ),
@@ -391,7 +391,7 @@ class _PastBookingCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('Reserva ${reservation.reservationCode}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black)),
-                  Text('${reservation.startDate} — ${reservation.endDate} · S/ ${reservation.totalAmount.toStringAsFixed(2)}', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                  Text('${formatReservationDateTime(reservation.startDate)} — ${formatReservationDateTime(reservation.endDate)} · S/ ${reservation.totalAmount.toStringAsFixed(2)}', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
                 ],
               ),
             ),

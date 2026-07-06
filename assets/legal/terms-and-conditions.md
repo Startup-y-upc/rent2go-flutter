@@ -59,7 +59,16 @@ Para consultas relacionadas con estos Términos y Condiciones, puede contactarno
 - **Correo electrónico:** info@rent2go.pe
 - **Página web:** sección de contacto en el sitio web oficial de Rent2Go — [https://startup-y-upc.github.io/landing-page/#contact](https://startup-y-upc.github.io/landing-page/#contact)
 
-## 12. Redes Sociales
+## 12. Planes de Cobertura durante el Alquiler
+
+- Al momento de reservar un vehículo, el arrendatario puede contratar un **plan de cobertura** (Sin cobertura, Básica, Estándar o Premium). El plan de cobertura **no constituye el seguro integral del vehículo**: es una protección **adicional y opcional** que se contrata junto con la reserva, aplicable únicamente durante el período específico del alquiler.
+- El costo del plan de cobertura elegido se cobra como un monto adicional por día, sumado al precio del alquiler del vehículo, y se muestra de forma desglosada antes de confirmar la reserva.
+- En caso de accidente, pérdida o robo durante el alquiler, el plan contratado determina el **deducible** que asume el arrendatario (la porción del daño que paga de su bolsillo) y qué costos son asumidos por la aseguradora o por la Plataforma. Cuanto mayor sea el nivel del plan, menor es el deducible a cargo del arrendatario.
+- Si el arrendatario no contrata ningún plan de cobertura (opción "Sin cobertura"), asume el 100% de la responsabilidad económica por cualquier daño, pérdida o robo ocurrido durante el alquiler.
+- Para el propietario del vehículo, la contratación de un plan de cobertura por parte del arrendatario reduce su riesgo financiero al prestar el vehículo: los costos de reparación de incidentes cubiertos son asumidos por la aseguradora o la Plataforma según el plan contratado, en lugar de requerir un reclamo directo del propietario al arrendatario por el monto total.
+- Los montos exactos de deducible y precio por día de cada plan se muestran en la pantalla de reserva y pueden variar según la configuración vigente de la Plataforma.
+
+## 13. Redes Sociales
 
 Rent2Go mantiene presencia oficial en los siguientes canales, enlazados desde el pie de página del sitio web:
 

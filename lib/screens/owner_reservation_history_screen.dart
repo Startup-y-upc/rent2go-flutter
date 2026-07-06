@@ -242,7 +242,7 @@ class _OwnerReservationHistoryScreenState extends State<OwnerReservationHistoryS
             ],
           ),
           const SizedBox(height: 8),
-          Text('${reservation.startDate} → ${reservation.endDate}', style: TextStyle(color: Colors.grey.shade800, fontSize: 13)),
+          Text('${formatReservationDateTime(reservation.startDate)} → ${formatReservationDateTime(reservation.endDate)}', style: TextStyle(color: Colors.grey.shade800, fontSize: 13)),
           const SizedBox(height: 12),
           Align(
             alignment: Alignment.centerRight,

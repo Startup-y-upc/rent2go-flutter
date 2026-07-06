@@ -610,7 +610,11 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
                         onTap: () => context.push('/terms'),
                       ),
                       const Divider(height: 1),
-                      const _OptionRow(icon: Icons.help_outline, label: 'Ayuda'),
+                      _OptionRow(
+                        icon: Icons.help_outline,
+                        label: 'Ayuda',
+                        onTap: () => context.push('/help'),
+                      ),
                       const Divider(height: 1),
                       _OptionRow(
                         icon: Icons.logout, label: 'Cerrar sesión', color: Colors.red,
