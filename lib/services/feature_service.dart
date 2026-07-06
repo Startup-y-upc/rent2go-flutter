@@ -6,9 +6,12 @@ import '../models/vehicle_models.dart';
 ///
 /// GET /api/v1/features — lectura, usada para poblar la selección múltiple en
 /// add_vehicle_screen.dart / edit_vehicle_screen.dart.
-/// POST /api/v1/features — permite crear un feature nuevo directamente desde
-/// el formulario de vehículo cuando el usuario no encuentra el que necesita
-/// en el catálogo existente (queda disponible para futuros vehículos también).
+///
+/// No expone creación de features por separado: los nombres de features
+/// nuevos que el usuario escribe en el formulario de vehículo se mantienen en
+/// memoria y se envían junto con los ya seleccionados del catálogo en el
+/// mismo payload de creación/actualización del vehículo
+/// (VehicleService.createVehicle/updateVehicle), sin llamar a este servicio.
 class FeatureService {
   static const String baseUrl = 'https://rent2go-backend-production.up.railway.app/api/v1';
 
@@ -27,28 +30,5 @@ class FeatureService {
       // Sin conexión o backend caído: se degrada a lista vacía.
     }
     return [];
-  }
-
-  /// POST /api/v1/features — crea un nuevo feature en el catálogo.
-  /// Body: { "name": "..." } (description/iconUrl son opcionales en el
-  /// backend, no se envían desde este formulario).
-  /// Devuelve el VehicleFeature creado con el id real asignado por el
-  /// backend. Lanza Exception con un mensaje de usuario si falla (409 = ya
-  /// existe un feature con ese nombre, u otro error de red/servidor).
-  static Future<VehicleFeature> createFeature(String name) async {
-    final uri = Uri.parse('$baseUrl/features');
-    final response = await http.post(
-      uri,
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'name': name}),
-    );
-
-    if (response.statusCode == 201) {
-      return VehicleFeature.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-    }
-    if (response.statusCode == 409) {
-      throw Exception('Ya existe una característica con ese nombre');
-    }
-    throw Exception('No se pudo crear la característica');
   }
 }

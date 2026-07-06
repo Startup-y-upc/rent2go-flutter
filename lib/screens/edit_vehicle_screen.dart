@@ -54,12 +54,12 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
   Set<String> _selectedFeatureNames = {};
   bool _loadingFeatures = true;
 
-  // Alta de features nuevos desde este mismo formulario — POST /api/v1/features.
-  // El feature creado se agrega al catálogo local y queda seleccionado; al
-  // pasar a formar parte de _availableFeatures se puede deseleccionar luego
-  // igual que cualquier otro feature existente.
+  // Características nuevas escritas por el usuario que no existen en el
+  // catálogo (_availableFeatures). No se crean en el backend por separado:
+  // quedan en memoria y se envían junto con las seleccionadas del catálogo
+  // en el mismo payload de actualización del vehículo (features).
+  final List<String> _newFeatureNames = [];
   final _newFeatureCtrl = TextEditingController();
-  bool _creatingFeature = false;
 
   // Vehículo con datos actualizados tras subir una nueva imagen (para refrescar
   // primaryImageUrl en pantalla sin recargar toda la screen).
@@ -103,11 +103,13 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
     });
   }
 
-  /// Agrega una característica nueva al catálogo (POST /api/v1/features) y la
-  /// selecciona automáticamente. Si ya existe una con el mismo nombre
-  /// (comparación case-insensitive) en la lista local, simplemente la
-  /// selecciona en vez de crear un duplicado.
-  Future<void> _addNewFeature() async {
+  /// Agrega una característica nueva a la lista local en memoria (sin llamar
+  /// a ningún endpoint). Si ya existe una con el mismo nombre (comparación
+  /// case-insensitive) en el catálogo o entre las ya agregadas localmente,
+  /// simplemente la selecciona en vez de agregar un duplicado. El nombre se
+  /// envía recién al guardar el vehículo, junto con los features del
+  /// catálogo seleccionados.
+  void _addNewFeature() {
     final name = _newFeatureCtrl.text.trim();
     if (name.isEmpty) return;
 
@@ -115,31 +117,25 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
       (f) => f.name.toLowerCase() == name.toLowerCase(),
     );
     if (matches.isNotEmpty) {
-      final existing = matches.first;
       setState(() {
-        _selectedFeatureNames.add(existing.name);
+        _selectedFeatureNames.add(matches.first.name);
         _newFeatureCtrl.clear();
       });
       return;
     }
 
-    setState(() => _creatingFeature = true);
-    try {
-      final created = await FeatureService.createFeature(name);
-      if (!mounted) return;
-      setState(() {
-        _availableFeatures = [..._availableFeatures, created];
-        _selectedFeatureNames.add(created.name);
-        _newFeatureCtrl.clear();
-        _creatingFeature = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _creatingFeature = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', '')), backgroundColor: Colors.redAccent),
-      );
+    final alreadyAddedLocally = _newFeatureNames.any(
+      (n) => n.toLowerCase() == name.toLowerCase(),
+    );
+    if (alreadyAddedLocally) {
+      setState(() => _newFeatureCtrl.clear());
+      return;
     }
+
+    setState(() {
+      _newFeatureNames.add(name);
+      _newFeatureCtrl.clear();
+    });
   }
 
   Future<void> _pickNewImage() async {
@@ -250,7 +246,7 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
         seats: _seatsCtrl.text.trim().isNotEmpty ? int.parse(_seatsCtrl.text.trim()) : null,
         transmission: _transmission!,
         fuelType: _fuelType!,
-        features: _selectedFeatureNames.toList(),
+        features: {..._selectedFeatureNames, ..._newFeatureNames}.toList(),
         latitude: _pickedLocation!.latitude,
         longitude: _pickedLocation!.longitude,
       );
@@ -564,6 +560,25 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
                           );
                         }).toList(),
                       ),
+            if (_newFeatureNames.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _newFeatureNames.map((name) {
+                  return FilterChip(
+                    label: Text(name),
+                    selected: true,
+                    selectedColor: kCyan.withValues(alpha: 0.2),
+                    checkmarkColor: Colors.black,
+                    labelStyle: const TextStyle(color: Colors.black87, fontSize: 13),
+                    backgroundColor: Colors.white,
+                    side: BorderSide(color: Colors.grey.shade300),
+                    onSelected: (_) => setState(() => _newFeatureNames.remove(name)),
+                  );
+                }).toList(),
+              ),
+            ],
             const SizedBox(height: 10),
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
@@ -571,7 +586,6 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
                 Expanded(
                   child: TextField(
                     controller: _newFeatureCtrl,
-                    enabled: !_creatingFeature,
                     style: const TextStyle(color: Colors.black, fontSize: 14),
                     decoration: InputDecoration(
                       hintText: 'Agregar otra característica...',
@@ -590,16 +604,14 @@ class _EditVehicleScreenState extends State<EditVehicleScreen> {
                 SizedBox(
                   height: 44,
                   child: ElevatedButton(
-                    onPressed: _creatingFeature ? null : _addNewFeature,
+                    onPressed: _addNewFeature,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.black,
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       padding: const EdgeInsets.symmetric(horizontal: 14),
                     ),
-                    child: _creatingFeature
-                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : const Icon(Icons.add, size: 20),
+                    child: const Icon(Icons.add, size: 20),
                   ),
                 ),
               ],

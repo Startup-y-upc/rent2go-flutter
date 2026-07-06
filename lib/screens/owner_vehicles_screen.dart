@@ -174,7 +174,7 @@ class _OwnerVehiclesScreenState extends State<OwnerVehiclesScreen> {
   Widget build(BuildContext context) {
     final activeCount = _activeVehicles.length;
     return Scaffold(
-      backgroundColor: const Color(0xFFD9E5E3),
+      backgroundColor: const Color(0xFFF0F4F8),
       body: SafeArea(
         child: DefaultTabController(
           length: 2,
@@ -378,7 +378,7 @@ class _VehicleCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-      decoration: BoxDecoration(color: const Color(0xFFEFF3F1), borderRadius: BorderRadius.circular(18)),
+      decoration: BoxDecoration(color: const Color(0xFFD9E5E3), borderRadius: BorderRadius.circular(18)),
       padding: const EdgeInsets.all(14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
