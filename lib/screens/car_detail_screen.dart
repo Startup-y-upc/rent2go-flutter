@@ -166,14 +166,14 @@ class _CarDetailScreenState extends State<CarDetailScreen> {
                         ),
                       ]),
                       const SizedBox(height: 10),
-                      Text(vehicle.name, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: colorScheme.onSurface)),
+                      Text(vehicle.name, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black)),
                       const SizedBox(height: 4),
-                      Text('${vehicle.categoryName} · ${vehicle.year}', style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 14)),
+                      Text('${vehicle.categoryName} · ${vehicle.year}', style: TextStyle(color: Colors.black, fontSize: 14)),
                       const SizedBox(height: 6),
                       Row(children: [
-                        Icon(Icons.location_on_outlined, size: 14, color: colorScheme.onSurfaceVariant),
+                        Icon(Icons.location_on_outlined, size: 14, color: Colors.black),
                         const SizedBox(width: 4),
-                        Expanded(child: Text(vehicle.location, style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 12))),
+                        Expanded(child: Text(vehicle.location, style: TextStyle(color: Colors.black, fontSize: 12))),
                       ]),
                       const SizedBox(height: 20),
                       Container(
@@ -221,7 +221,7 @@ class _CarDetailScreenState extends State<CarDetailScreen> {
                                     ],
                                   ),
                                   Text(
-                                    _ownerLoading ? 'Cargando...' : 'ID #${vehicle.ownerId}',
+                                    'Propietario del vehículo',
                                     style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 12),
                                   ),
                                 ],
@@ -236,21 +236,14 @@ class _CarDetailScreenState extends State<CarDetailScreen> {
                         ),
                       ),
                       const SizedBox(height: 10),
-                      _OwnerVerificationBadges(
-                        key: const Key('owner_verification_badges'),
-                        loading: _ownerLoading,
-                        error: _ownerError,
-                        owner: _owner,
-                      ),
-                      const SizedBox(height: 20),
                       if (vehicle.description != null && vehicle.description!.isNotEmpty) ...[
-                        Text('SOBRE EL COCHE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: colorScheme.onSurfaceVariant, letterSpacing: 1)),
+                        Text('SOBRE EL COCHE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black, letterSpacing: 1)),
                         const SizedBox(height: 8),
-                        Text(vehicle.description!, style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 14, height: 1.5)),
+                        Text(vehicle.description!, style: TextStyle(color: Colors.black, fontSize: 14, height: 1.5)),
                       ],
                       if (vehicle.features.isNotEmpty) ...[
                         const SizedBox(height: 20),
-                        Text('CARACTERÍSTICAS', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: colorScheme.onSurfaceVariant, letterSpacing: 1)),
+                        Text('CARACTERÍSTICAS', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black, letterSpacing: 1)),
                         const SizedBox(height: 8),
                         Wrap(
                           spacing: 8, runSpacing: 8,
@@ -258,7 +251,7 @@ class _CarDetailScreenState extends State<CarDetailScreen> {
                         ),
                       ],
                       const SizedBox(height: 20),
-                      Text('RESEÑAS', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: colorScheme.onSurfaceVariant, letterSpacing: 1)),
+                      Text('RESEÑAS', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black, letterSpacing: 1)),
                       const SizedBox(height: 8),
                       _ReviewsSection(
                         key: const Key('car_detail_reviews_section'),
@@ -287,7 +280,7 @@ class _CarDetailScreenState extends State<CarDetailScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text('S/ ${vehicle.dailyPrice.toInt()}/día', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: colorScheme.onSurface)),
-                      Text('2 días · Total S/${(vehicle.dailyPrice * 2).toInt()}', style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 12)),
+                      Text('2 días · Total S/${(vehicle.dailyPrice * 2).toInt()}', style: TextStyle(color: Colors.black, fontSize: 12)),
                     ],
                   ),
                   const SizedBox(width: 16),
@@ -347,59 +340,6 @@ class _SpecItem extends StatelessWidget {
         const SizedBox(height: 4),
         Text(label, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: colorScheme.onSurface)),
         Text(sublabel, style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 12)),
-      ],
-    );
-  }
-}
-
-/// US76 closure (Sprint 5 fixes remaining scope): three checkmark-style verification items
-/// shown OUTSIDE the owner info box — "DNI verificado", "Carnet validado", "Teléfono".
-///
-/// Reuses the exact same badge visual (Icon + Tooltip + kCyan) established in
-/// reservation_detail_screen.dart/owner_reservation_history_screen.dart for
-/// dniVerified/licenseVerified, rather than inventing a new style. "Teléfono" reuses
-/// User.phoneVerified's existing single-flag semantics — CounterpartyResource does not
-/// (and per BRD-2026-07-05 §9.4, deliberately does not) expose phoneVerified, since phone
-/// verification is out of this endpoint's minimal PII-safe scope; shown here as an
-/// unverified/neutral state rather than omitted, to preserve the three-item layout the
-/// original spec asked for without inventing new backend scope for a single item.
-///
-/// Handles loading/error/missing-data explicitly: a vehicle whose owner has no KYC on file
-/// shows all three as "not verified," never a crash or blank space.
-class _OwnerVerificationBadges extends StatelessWidget {
-  final bool loading;
-  final bool error;
-  final CounterpartyData? owner;
-
-  const _OwnerVerificationBadges({super.key, required this.loading, required this.error, required this.owner});
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    if (loading) {
-      return const Padding(
-        key: Key('owner_badges_loading_state'),
-        padding: EdgeInsets.symmetric(vertical: 4),
-        child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-      );
-    }
-
-    // A vehicle-not-found/parse-failure case still renders the three items in their
-    // explicit "not verified" state rather than an error banner — this is a soft,
-    // non-blocking trust signal on a public detail screen, not a critical data load.
-    final dniVerified = !error && owner?.dniVerified == true;
-    final licenseVerified = !error && owner?.licenseVerified == true;
-    const phoneVerified = false; // out of CounterpartyResource's scope, see class doc.
-
-    return Wrap(
-      key: const Key('owner_badges_content'),
-      spacing: 14,
-      runSpacing: 6,
-      children: [
-        _VerificationCheckItem(label: 'DNI verificado', verified: dniVerified, color: colorScheme.onSurfaceVariant),
-        _VerificationCheckItem(label: 'Carnet validado', verified: licenseVerified, color: colorScheme.onSurfaceVariant),
-        _VerificationCheckItem(label: 'Teléfono', verified: phoneVerified, color: colorScheme.onSurfaceVariant),
       ],
     );
   }
@@ -547,7 +487,7 @@ class _ReviewTile extends StatelessWidget {
               if (review.comment != null && review.comment!.trim().isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 2),
-                  child: Text(review.comment!, style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant)),
+                  child: Text(review.comment!, style: TextStyle(fontSize: 12, color: Colors.black)),
                 ),
             ],
           ),

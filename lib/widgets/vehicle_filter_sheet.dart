@@ -113,6 +113,20 @@ class _VehicleFilterSheetContentState extends State<_VehicleFilterSheetContent> 
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    // Bugfix: TextField/InputDecoration below previously relied on Flutter's
+    // default light-grey label/hint/input text, which read as near-invisible
+    // against this sheet's white background (and inverted badly in dark mode).
+    // Deriving explicit theme colors here fixes contrast in both themes.
+    final inputTextStyle = TextStyle(color: colorScheme.onSurface);
+    final labelStyle = TextStyle(color: Colors.black);
+    final inputDecorationTheme = InputDecorationTheme(
+      labelStyle: labelStyle,
+      hintStyle: labelStyle,
+      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(4), borderSide: BorderSide(color: colorScheme.outline)),
+      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(4), borderSide: BorderSide(color: colorScheme.primary, width: 2)),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(4), borderSide: BorderSide(color: colorScheme.outline)),
+    );
     return DraggableScrollableSheet(
       initialChildSize: 0.75,
       minChildSize: 0.4,
@@ -122,7 +136,9 @@ class _VehicleFilterSheetContentState extends State<_VehicleFilterSheetContent> 
         return SingleChildScrollView(
           controller: scrollController,
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-          child: Column(
+          child: Theme(
+            data: Theme.of(context).copyWith(inputDecorationTheme: inputDecorationTheme),
+            child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Center(
@@ -132,7 +148,7 @@ class _VehicleFilterSheetContentState extends State<_VehicleFilterSheetContent> 
                   decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
                 ),
               ),
-              const Text('Filtrar vehículos', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black)),
+              Text('Filtrar vehículos', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: colorScheme.onSurface)),
               const SizedBox(height: 16),
 
               const _SectionLabel('Precio por día'),
@@ -142,7 +158,8 @@ class _VehicleFilterSheetContentState extends State<_VehicleFilterSheetContent> 
                     child: TextField(
                       controller: _minPriceCtrl,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Mínimo', border: OutlineInputBorder()),
+                      style: inputTextStyle,
+                      decoration: const InputDecoration(labelText: 'Mínimo'),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -150,7 +167,8 @@ class _VehicleFilterSheetContentState extends State<_VehicleFilterSheetContent> 
                     child: TextField(
                       controller: _maxPriceCtrl,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Máximo', border: OutlineInputBorder()),
+                      style: inputTextStyle,
+                      decoration: const InputDecoration(labelText: 'Máximo'),
                     ),
                   ),
                 ],
@@ -162,7 +180,8 @@ class _VehicleFilterSheetContentState extends State<_VehicleFilterSheetContent> 
               TextField(
                 controller: _seatsCtrl,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(hintText: 'Ej. 4', border: OutlineInputBorder()),
+                style: inputTextStyle,
+                decoration: const InputDecoration(hintText: 'Ej. 4'),
               ),
 
               const _SectionDivider(),
@@ -237,6 +256,7 @@ class _VehicleFilterSheetContentState extends State<_VehicleFilterSheetContent> 
                 ],
               ),
             ],
+            ),
           ),
         );
       },
@@ -249,7 +269,7 @@ class _SectionLabel extends StatelessWidget {
   const _SectionLabel(this.text);
   @override
   Widget build(BuildContext context) =>
-      Text(text, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black));
+      Text(text, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface));
 }
 
 class _SectionDivider extends StatelessWidget {

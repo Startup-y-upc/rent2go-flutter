@@ -207,7 +207,28 @@ class _ReservationDetailScreenState extends State<ReservationDetailScreen> {
               ],
             ),
             const SizedBox(height: 20),
+            // Section order below mirrors Kotlin's BookingDetailScreen.kt:
+            // vehicle -> dates/locations -> coverage -> confirmations -> amount
+            // -> damage report -> payment retry -> counterparty/chat -> actions.
             _buildVehicleSection(),
+            const SizedBox(height: 16),
+            _row('Recogida', _reservation.startDate),
+            _row('Devolución', _reservation.endDate),
+            _row('Punto de recogida', _reservation.pickupLocation),
+            _row('Punto de devolución', _reservation.returnLocation),
+            _row('Cobertura', _reservation.coveragePlan),
+            const SizedBox(height: 6),
+            if (_reservation.pickupConfirmedAt != null || _reservation.returnConfirmedAt != null) ...[
+              _buildConfirmationsCard(),
+              const SizedBox(height: 16),
+            ],
+            // Parity with Kotlin's BookingDetailAmountCard: a distinct, visually
+            // highlighted "total paid" card instead of a plain label/value row.
+            _buildAmountCard(),
+            if (_reservation.damageReport != null && _reservation.damageReport!.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              _row('Reporte de daños', _reservation.damageReport!),
+            ],
             const SizedBox(height: 16),
             _buildCounterpartySection(),
             const SizedBox(height: 12),
@@ -224,32 +245,6 @@ class _ReservationDetailScreenState extends State<ReservationDetailScreen> {
                 minimumSize: const Size(double.infinity, 44),
               ),
             ),
-            const SizedBox(height: 20),
-            _row('Recogida', _reservation.startDate),
-            _row('Devolución', _reservation.endDate),
-            _row('Punto de recogida', _reservation.pickupLocation),
-            _row('Punto de devolución', _reservation.returnLocation),
-            _row('Cobertura', _reservation.coveragePlan),
-            const SizedBox(height: 6),
-            // Parity with Kotlin's BookingDetailAmountCard: a distinct, visually
-            // highlighted "total paid" card instead of a plain label/value row.
-            _buildAmountCard(),
-            if (_reservation.pickupConfirmedAt != null || _reservation.returnConfirmedAt != null) ...[
-              const SizedBox(height: 16),
-              _buildConfirmationsCard(),
-            ],
-            if (_reservation.pickupPhotos.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              _buildPhotosCard('Fotos de recogida', _reservation.pickupPhotos, key: 'reservation_detail_pickup_photos'),
-            ],
-            if (_reservation.returnPhotos.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              _buildPhotosCard('Fotos de devolución', _reservation.returnPhotos, key: 'reservation_detail_return_photos'),
-            ],
-            if (_reservation.damageReport != null && _reservation.damageReport!.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              _row('Reporte de daños', _reservation.damageReport!),
-            ],
             if (_retryError != null) ...[
               const SizedBox(height: 8),
               Container(
@@ -619,38 +614,6 @@ class _ReservationDetailScreenState extends State<ReservationDetailScreen> {
         ],
       );
 
-  /// Parity with Kotlin's BookingDetailPhotosCard (pickup/return photos) —
-  /// previously absent from Flutter despite ReservationData already carrying
-  /// both photo lists.
-  Widget _buildPhotosCard(String title, List<String> photos, {required String key}) => Container(
-        key: Key(key),
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(color: Colors.grey[50], borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade200)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black)),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: photos
-                  .map((url) => ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: CachedNetworkImage(
-                          imageUrl: url,
-                          width: 80,
-                          height: 80,
-                          fit: BoxFit.cover,
-                          errorWidget: (_, __, ___) => Container(width: 80, height: 80, color: Colors.grey[300], child: const Icon(Icons.broken_image)),
-                        ),
-                      ))
-                  .toList(),
-            ),
-          ],
-        ),
-      );
 }
 
 /// Issue 5 — small, non-interactive map preview of the vehicle's pickup coordinates, using

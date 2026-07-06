@@ -16,14 +16,14 @@ class LocationPickerScreen extends StatefulWidget {
 }
 
 class _LocationPickerScreenState extends State<LocationPickerScreen> {
-  static const _madridCenter = LatLng(40.4168, -3.7038);
+  static const _limaCenter = LatLng(-12.046374, -77.042793);
   late LatLng _picked;
   final _mapController = MapController();
 
   @override
   void initState() {
     super.initState();
-    _picked = widget.initialLocation ?? _madridCenter;
+    _picked = widget.initialLocation ?? _limaCenter;
   }
 
   @override

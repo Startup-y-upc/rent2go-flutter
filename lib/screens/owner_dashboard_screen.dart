@@ -113,7 +113,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: isError ? Colors.redAccent : Colors.black,
+        backgroundColor: isError ? Colors.redAccent : Colors.green,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         margin: const EdgeInsets.all(16),
@@ -142,6 +142,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       'renterId': reservation.renterId,
       'vehicleId': reservation.vehicleId,
       'reservationId': reservation.id,
+      "vehicleImage": reservation.vehicleImage,
       'counterpartyPhotoUrl': reservation.renter?.profileImageUrl,
     });
   }
@@ -194,16 +195,23 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
     }
   }
 
-  ReservationData? get _nextUpcoming {
+  /// Bugfix: previously exposed only the single nearest upcoming reservation
+  /// (`.first`), hiding every other CONFIRMED/ACTIVE reservation the owner had.
+  /// Now returns the full list, most recent (soonest) first, rendered as a
+  /// scrollable Column of cards below.
+  List<ReservationData> get _upcomingReservations {
     final upcoming = _reservations.where((r) =>
         ['CONFIRMED', 'ACTIVE'].contains(r.status.toUpperCase())).toList()
-      ..sort((a, b) => a.startDate.compareTo(b.startDate));
-    return upcoming.isNotEmpty ? upcoming.first : null;
+      ..sort((a, b) => b.startDate.compareTo(a.startDate));
+    return upcoming;
   }
 
-  ReservationData? get _firstPending {
-    final pending = _reservations.where((r) => r.status.toUpperCase() == 'PENDING').toList();
-    return pending.isNotEmpty ? pending.first : null;
+  /// Bugfix: previously exposed only the first pending reservation, hiding
+  /// every other pending request. Now returns all of them, most recent first.
+  List<ReservationData> get _pendingReservations {
+    final pending = _reservations.where((r) => r.status.toUpperCase() == 'PENDING').toList()
+      ..sort((a, b) => b.startDate.compareTo(a.startDate));
+    return pending;
   }
 
   @override
@@ -230,18 +238,24 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                     else if (_reservationsError != null)
                       _buildErrorCard(_reservationsError!)
                     else ...[
-                      if (_nextUpcoming != null) ...[
+                      if (_upcomingReservations.isNotEmpty) ...[
                         const Text('Próxima actividad', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black)),
                         const SizedBox(height: 12),
-                        _buildTodayActivityCard(_nextUpcoming!),
-                        const SizedBox(height: 24),
+                        for (final reservation in _upcomingReservations) ...[
+                          _buildTodayActivityCard(reservation),
+                          const SizedBox(height: 12),
+                        ],
+                        const SizedBox(height: 12),
                       ],
-                      if (_firstPending != null) ...[
+                      if (_pendingReservations.isNotEmpty) ...[
                         const Text('Solicitudes pendientes', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black)),
                         const SizedBox(height: 12),
-                        _buildPendingRequestCard(_firstPending!),
+                        for (final reservation in _pendingReservations) ...[
+                          _buildPendingRequestCard(reservation),
+                          const SizedBox(height: 12),
+                        ],
                       ],
-                      if (_nextUpcoming == null && _firstPending == null)
+                      if (_upcomingReservations.isEmpty && _pendingReservations.isEmpty)
                         _buildEmptyReservationsCard(),
                     ],
                     const SizedBox(height: 100),
@@ -444,9 +458,9 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                child: reservation.pickupPhotos.isNotEmpty
+                child: reservation.vehicleImage != null
                     ? CachedNetworkImage(
-                        imageUrl: reservation.pickupPhotos.first,
+                        imageUrl: reservation.vehicleImage!,
                         width: 80, height: 60, fit: BoxFit.cover,
                         errorWidget: (_, __, ___) => Container(width: 80, height: 60, color: Colors.grey[300], child: const Icon(Icons.directions_car)),
                       )

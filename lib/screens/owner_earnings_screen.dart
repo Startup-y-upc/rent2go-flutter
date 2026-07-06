@@ -316,7 +316,10 @@ class _OwnerEarningsScreenState extends State<OwnerEarningsScreen> {
             textBaseline: TextBaseline.alphabetic,
             children: [
               Text(
-                _loading ? '—' : _report.totalAmount.toStringAsFixed(2),
+                _loading
+                    ? '—'
+                    : ((_report.availablePayoutCents) / 100.0)
+                        .toStringAsFixed(2),
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 48,
@@ -419,14 +422,19 @@ class _OwnerEarningsScreenState extends State<OwnerEarningsScreen> {
             'Últimos 7 meses',
             style: TextStyle(color: Colors.grey, fontSize: 12),
           ),
-          Text(
-            '${_report.totalAmount.toStringAsFixed(2)} ${_report.currency} · ${_report.paymentsCount} pagos',
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Colors.black,
-            ),
-          ),
+          Builder(builder: (_) {
+            final reservationMovements = _movements.where((m) => m.reservationId != null);
+            final double movementsTotal = reservationMovements.fold(0.0, (double s, m) => s + m.amount);
+            final int paymentsCount = reservationMovements.length;
+            return Text(
+              '${movementsTotal.toStringAsFixed(2)} ${_report.currency} · ${paymentsCount} pagos',
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.black,
+              ),
+            );
+          }),
           const SizedBox(height: 4),
           const Text(
             'Desglose de movimientos',

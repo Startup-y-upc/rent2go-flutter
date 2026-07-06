@@ -428,7 +428,7 @@ class _VehicleCard extends StatelessWidget {
                   ),
           ),
           const SizedBox(height: 12),
-          Row(
+          /* Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
@@ -444,7 +444,7 @@ class _VehicleCard extends StatelessWidget {
               const SizedBox(width: 2),
               const Text('—', style: TextStyle(fontWeight: FontWeight.bold)),
             ],
-          ),
+          ), */
           const SizedBox(height: 14),
           Row(
             children: [
