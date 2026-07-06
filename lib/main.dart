@@ -4,6 +4,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 import 'screens/login_screen.dart';
 import 'screens/register_screen.dart';
@@ -47,6 +48,11 @@ const String kStripePublishableKey = String.fromEnvironment(
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // reservation_detail_screen.dart (Box 2) shows dates like "Lun 06 jul 2026"
+  // via DateFormat(..., 'es') (formatReservationDayLabel in
+  // reservation_service.dart), which needs the 'es' locale's date symbol
+  // data loaded before first use or it throws a LocaleDataException.
+  await initializeDateFormatting('es');
   await Hive.initFlutter();
   await Hive.openBox('register_draft');
   await Hive.openBox('user_docs');

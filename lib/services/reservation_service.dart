@@ -23,6 +23,51 @@ String formatReservationDateTime(String rawIsoDate) {
   return _reservationDateTimeFormat.format(parsed.toLocal());
 }
 
+/// Rediseño de reservation_detail_screen.dart (Box 2 — fechas de recogida y
+/// devolución): formato corto en español "Lun 06 jul 2026" (día de la semana
+/// abreviado + día + mes abreviado en minúsculas + año), distinto del
+/// dd/MM/yyyy HH:mm de [formatReservationDateTime] usado en el resto de la
+/// pantalla (confirmaciones, listados). Requiere que
+/// `initializeDateFormatting('es')` se haya ejecutado antes (ver main.dart);
+/// si el locale 'es' no está inicializado, DateFormat lanza al primer uso, así
+/// que se envuelve en try/catch y se degrada al formato dd/MM/yyyy neutro para
+/// nunca romper la pantalla por un problema de inicialización de locale.
+final DateFormat _reservationDayLabelFormatEs = DateFormat('EEE dd MMM yyyy', 'es');
+final DateFormat _reservationDayLabelFormatFallback = DateFormat('dd/MM/yyyy');
+
+String formatReservationDayLabel(String rawIsoDate) {
+  if (rawIsoDate.isEmpty) return rawIsoDate;
+  final parsed = DateTime.tryParse(rawIsoDate);
+  if (parsed == null) return rawIsoDate;
+  final local = parsed.toLocal();
+  try {
+    final formatted = _reservationDayLabelFormatEs.format(local);
+    // DateFormat abbreviations come back capitalized per-word (e.g. "Lun 06
+    // Jul 2026"); the requested style only capitalizes the weekday.
+    final parts = formatted.split(' ');
+    if (parts.length == 4) {
+      parts[2] = parts[2].toLowerCase();
+      return parts.join(' ');
+    }
+    return formatted;
+  } catch (_) {
+    return _reservationDayLabelFormatFallback.format(local);
+  }
+}
+
+/// Conteo total de días de la reserva (Box 2), a partir de las mismas fechas
+/// crudas ISO ya usadas para el rango de recogida/devolución. Se redondea al
+/// alza (`ceil`) para que una reserva de pocas horas siga contando como
+/// mínimo 1 día en lugar de mostrar "0 días".
+int reservationDurationInDays(String rawStartIsoDate, String rawEndIsoDate) {
+  final start = DateTime.tryParse(rawStartIsoDate);
+  final end = DateTime.tryParse(rawEndIsoDate);
+  if (start == null || end == null) return 0;
+  final diff = end.difference(start).inHours / 24;
+  final days = diff.ceil();
+  return days < 1 ? 1 : days;
+}
+
 /// ReservationResource exacto devuelto por el backend
 /// (ReservationController.java — campos verificados directamente).
 class ReservationData {

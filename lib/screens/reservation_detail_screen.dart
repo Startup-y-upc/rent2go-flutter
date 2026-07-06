@@ -192,6 +192,7 @@ class _ReservationDetailScreenState extends State<ReservationDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // 1. Header: título "Reserva" + código de la reserva.
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -207,21 +208,27 @@ class _ReservationDetailScreenState extends State<ReservationDetailScreen> {
               ],
             ),
             const SizedBox(height: 20),
-            // Section order below mirrors Kotlin's BookingDetailScreen.kt:
-            // vehicle -> dates/locations -> coverage -> confirmations -> amount
-            // -> damage report -> payment retry -> counterparty/chat -> actions.
+            // Rediseño (Sprint 5 fixes): orden fijo pedido por el usuario —
+            // 1 vehículo+propietario, 2 fechas, 3 ubicaciones recogida/devolución,
+            // 4 ubicación del vehículo+mapa, 5 cobertura, 6 confirmaciones,
+            // 7 total pagado, 8 acciones finales. La lógica/datos de cada box
+            // se reutiliza tal cual (formatReservationDateTime, coveragePlan,
+            // _buildAmountCard, _buildConfirmationsCard, etc.) — solo cambia el
+            // orden y la disposición visual.
             _buildVehicleSection(),
             const SizedBox(height: 16),
-            _row('Recogida', formatReservationDateTime(_reservation.startDate)),
-            _row('Devolución', formatReservationDateTime(_reservation.endDate)),
-            _row('Punto de recogida', _reservation.pickupLocation),
-            _row('Punto de devolución', _reservation.returnLocation),
-            _row('Cobertura', _reservation.coveragePlan),
-            const SizedBox(height: 6),
+            _buildDatesCard(),
+            const SizedBox(height: 16),
+            _buildLocationsCard(),
+            const SizedBox(height: 16),
+            _buildVehicleMapCard(),
+            const SizedBox(height: 16),
+            _buildCoverageCard(),
             if (_reservation.pickupConfirmedAt != null || _reservation.returnConfirmedAt != null) ...[
-              _buildConfirmationsCard(),
               const SizedBox(height: 16),
+              _buildConfirmationsCard(),
             ],
+            const SizedBox(height: 16),
             // Parity with Kotlin's BookingDetailAmountCard: a distinct, visually
             // highlighted "total paid" card instead of a plain label/value row.
             _buildAmountCard(),
@@ -229,24 +236,8 @@ class _ReservationDetailScreenState extends State<ReservationDetailScreen> {
               const SizedBox(height: 12),
               _row('Reporte de daños', _reservation.damageReport!),
             ],
-            const SizedBox(height: 16),
-            _buildCounterpartySection(),
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              key: const Key('reservation_detail_chat_button'),
-              onPressed: () => _openChat(context),
-              icon: const Icon(Icons.chat_bubble_outline, size: 18),
-              label: const Text('Abrir chat'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: kCyan,
-                side: const BorderSide(color: kCyan),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                minimumSize: const Size(double.infinity, 44),
-              ),
-            ),
             if (_retryError != null) ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
               Container(
                 key: const Key('reservation_detail_payment_error'),
                 padding: const EdgeInsets.all(12),
@@ -260,13 +251,170 @@ class _ReservationDetailScreenState extends State<ReservationDetailScreen> {
                 ),
               ),
             ],
-            const SizedBox(height: 12),
-            _buildActionButtons(context),
+            const SizedBox(height: 16),
+            // 8. Acciones finales: contraparte/chat + reintento de pago +
+            // reportar problema + calificar, agrupados bajo un único box con
+            // el título "¿Necesitas ayuda con esta reserva?".
+            _buildHelpActionsCard(context),
           ],
         ),
       ),
     );
   }
+
+  /// Box 2 — fechas de recogida y devolución: 3 columnas (Recogida | flecha
+  /// cyan | Devolución) con el nuevo formato corto en español, más el conteo
+  /// total de días de la reserva debajo.
+  Widget _buildDatesCard() {
+    final days = reservationDurationInDays(_reservation.startDate, _reservation.endDate);
+    return Container(
+      key: const Key('reservation_detail_dates_card'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: Colors.grey[50], borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.grey.shade200)),
+      child: Column(
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: _dateColumn('Recogida', formatReservationDayLabel(_reservation.startDate))),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 8),
+                child: Icon(Icons.arrow_forward, color: kCyan, size: 22),
+              ),
+              Expanded(child: _dateColumn('Devolución', formatReservationDayLabel(_reservation.endDate), alignRight: true)),
+            ],
+          ),
+          const SizedBox(height: 14),
+          const Divider(height: 1),
+          const SizedBox(height: 10),
+          Text('$days día${days == 1 ? '' : 's'}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black)),
+        ],
+      ),
+    );
+  }
+
+  Widget _dateColumn(String label, String value, {bool alignRight = false}) => Column(
+        crossAxisAlignment: alignRight ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        children: [
+          Text(label, style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+          const SizedBox(height: 4),
+          Text(value, style: const TextStyle(color: Colors.black, fontSize: 14, fontWeight: FontWeight.w600), textAlign: alignRight ? TextAlign.right : TextAlign.left),
+        ],
+      );
+
+  /// Box 3 — ubicaciones de recogida y devolución, en vertical, con ícono de
+  /// pin para recogida y de bandera para devolución (aunque en la práctica
+  /// ambas sean la misma dirección).
+  Widget _buildLocationsCard() => Container(
+        key: const Key('reservation_detail_locations_card'),
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(color: Colors.grey[50], borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.grey.shade200)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _locationRow(Icons.location_on, 'Punto de recogida', _reservation.pickupLocation),
+            const SizedBox(height: 14),
+            _locationRow(Icons.flag, 'Punto de devolución', _reservation.returnLocation),
+          ],
+        ),
+      );
+
+  Widget _locationRow(IconData icon, String label, String value) => Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: kCyan),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                const SizedBox(height: 2),
+                Text(value, style: const TextStyle(color: Colors.black, fontSize: 14, fontWeight: FontWeight.w600)),
+              ],
+            ),
+          ),
+        ],
+      );
+
+  /// Box 4 — ubicación del vehículo + mapa, reutilizando el mismo patrón/
+  /// widget (_VehicleLocationPreview, ya presente en este archivo) que se
+  /// mostraba antes dentro de _buildVehicleSection().
+  Widget _buildVehicleMapCard() {
+    final vehicle = _vehicle;
+    if (vehicle == null) return const SizedBox.shrink();
+    return Container(
+      key: const Key('reservation_detail_vehicle_location_card'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: Colors.grey[50], borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.grey.shade200)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.directions_car, size: 16, color: kCyan),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(vehicle.location.isNotEmpty ? vehicle.location : 'Ubicación no especificada',
+                    style: const TextStyle(fontSize: 13, color: Colors.black87, fontWeight: FontWeight.w500)),
+              ),
+            ],
+          ),
+          if (vehicle.latitude != null && vehicle.longitude != null) ...[
+            const SizedBox(height: 10),
+            _VehicleLocationPreview(key: const Key('reservation_detail_vehicle_map'), latitude: vehicle.latitude!, longitude: vehicle.longitude!),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Box 5 — cobertura: reutiliza el mismo _row(label, value) ya existente,
+  /// solo reubicado en un box independiente en este punto del flujo.
+  Widget _buildCoverageCard() => Container(
+        key: const Key('reservation_detail_coverage_card'),
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(color: Colors.grey[50], borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.grey.shade200)),
+        child: _row('Cobertura', _reservation.coveragePlan),
+      );
+
+  /// Box 8 — acciones finales: mismo título pedido por el usuario agrupando
+  /// los botones ya existentes (chat, reintento de pago, reportar, calificar)
+  /// sin cambiar su lógica.
+  Widget _buildHelpActionsCard(BuildContext context) => Container(
+        key: const Key('reservation_detail_help_actions_card'),
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(color: Colors.grey[50], borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.grey.shade200)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text('¿Necesitas ayuda con esta reserva?', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black)),
+            const SizedBox(height: 12),
+            _buildCounterpartySection(),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              key: const Key('reservation_detail_chat_button'),
+              onPressed: () => _openChat(context),
+              icon: const Icon(Icons.chat_bubble_outline, size: 18),
+              label: const Text('Enviar mensaje'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: kCyan,
+                side: const BorderSide(color: kCyan),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                minimumSize: const Size(double.infinity, 44),
+              ),
+            ),
+            const SizedBox(height: 12),
+            _buildActionButtons(context),
+          ],
+        ),
+      );
 
   /// US41/US43: entry points de reporte y calificación. "Calificar" solo se
   /// muestra sobre una reserva COMPLETED (no tiene sentido antes).
@@ -303,7 +451,7 @@ class _ReservationDetailScreenState extends State<ReservationDetailScreen> {
           key: const Key('reservation_detail_report_issue_button'),
           onPressed: () => context.push('/report-issue', extra: _reservation),
           icon: const Icon(Icons.report_problem_outlined, size: 18),
-          label: const Text('Reportar un problema'),
+          label: const Text('Reportar problema'),
           style: OutlinedButton.styleFrom(
             foregroundColor: Colors.redAccent,
             side: const BorderSide(color: Colors.redAccent),
@@ -422,22 +570,39 @@ class _ReservationDetailScreenState extends State<ReservationDetailScreen> {
             ],
           ),
           const SizedBox(height: 10),
-          Row(
-            children: [
-              const Icon(Icons.location_on_outlined, size: 16, color: kCyan),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(vehicle.location.isNotEmpty ? vehicle.location : 'Ubicación no especificada',
-                    style: const TextStyle(fontSize: 13, color: Colors.black87, fontWeight: FontWeight.w500)),
-              ),
-            ],
-          ),
-          if (vehicle.latitude != null && vehicle.longitude != null) ...[
-            const SizedBox(height: 10),
-            _VehicleLocationPreview(key: const Key('reservation_detail_vehicle_map'), latitude: vehicle.latitude!, longitude: vehicle.longitude!),
-          ],
+          const Divider(height: 1),
+          const SizedBox(height: 10),
+          // Box 1 (rediseño): propietario embebido en la misma card del
+          // vehículo — foto pequeña/avatar + nombre. La ubicación y el mapa
+          // del vehículo se movieron al Box 4 (_buildVehicleMapCard).
+          _buildOwnerRow(),
         ],
       ),
+    );
+  }
+
+  /// Fila compacta de propietario (avatar + nombre) usada dentro del Box 1
+  /// (vehículo). Reutiliza los mismos campos de ReservationData que
+  /// _buildCounterpartySection (owner/profileImageUrl), sin duplicar las
+  /// insignias de verificación que sí se muestran en el Box 8.
+  Widget _buildOwnerRow() {
+    final owner = _reservation.owner;
+    final displayName = owner?.fullName ?? _reservation.ownerDisplayName;
+    final photoUrl = owner?.profileImageUrl;
+    return Row(
+      key: const Key('reservation_detail_owner_row'),
+      children: [
+        (photoUrl != null && photoUrl.isNotEmpty)
+            ? CircleAvatar(radius: 14, backgroundColor: Colors.teal.shade100, backgroundImage: CachedNetworkImageProvider(photoUrl), onBackgroundImageError: (_, __) {})
+            : CircleAvatar(
+                radius: 14, backgroundColor: Colors.teal.shade100,
+                child: Text(displayName.isNotEmpty ? displayName[0].toUpperCase() : '?', style: const TextStyle(color: Colors.teal, fontWeight: FontWeight.bold, fontSize: 12)),
+              ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(displayName, style: TextStyle(fontSize: 13, color: Colors.grey[700], fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis),
+        ),
+      ],
     );
   }
 

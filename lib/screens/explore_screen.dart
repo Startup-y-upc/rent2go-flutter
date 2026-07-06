@@ -26,6 +26,15 @@ class _ExploreScreenState extends State<ExploreScreen> {
   bool _loading = true;
   String? _errorMsg;
 
+  // Búsqueda local por marca/modelo — reemplaza la barra de ubicación/fechas
+  // (que era solo texto estático, sin lógica real). El backend no expone un
+  // parámetro de búsqueda por nombre (VehicleController.searchAvailableVehicles
+  // solo filtra por precio/asientos/transmisión/combustible/radio geográfico),
+  // así que filtramos en memoria sobre la lista ya cargada, igual que hace
+  // _AllVehiclesSheet con la lista completa.
+  final _searchController = TextEditingController();
+  String _searchQuery = '';
+
   final _bottomSheetScrollController = ScrollController();
   int _currentPage = 0;
   bool _hasMorePages = false;
@@ -47,7 +56,23 @@ class _ExploreScreenState extends State<ExploreScreen> {
   void dispose() {
     _bottomSheetScrollController.removeListener(_onBottomSheetScroll);
     _bottomSheetScrollController.dispose();
+    _searchController.dispose();
     super.dispose();
+  }
+
+  /// Filtra la lista ya cargada por marca/modelo (VehicleData.name = "$make
+  /// $model"), comparación case-insensitive tipo `contains`. Sin debounce: el
+  /// filtro es un `where` en memoria sobre listas de tamaño moderado (página
+  /// de vehículos cargada), no una llamada de red, así que recalcular en cada
+  /// tecla no tiene costo perceptible.
+  List<VehicleData> get _filteredVehicles {
+    final query = _searchQuery.trim().toLowerCase();
+    if (query.isEmpty) return _vehicles;
+    return _vehicles.where((v) => v.name.toLowerCase().contains(query)).toList();
+  }
+
+  void _onSearchChanged(String value) {
+    setState(() => _searchQuery = value);
   }
 
   void _onBottomSheetScroll() {
@@ -167,7 +192,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (_) => _AllVehiclesSheet(
-        vehicles: _vehicles,
+        vehicles: _filteredVehicles,
         onSelect: (v) {
           Navigator.pop(context);
           context.push('/car-detail', extra: v);
@@ -207,7 +232,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                 ),
                 MarkerLayer(
                   markers: [
-                    ..._vehicles.asMap().entries.map((e) {
+                    ..._filteredVehicles.asMap().entries.map((e) {
                       final selected = _selectedIndex == e.key;
                       return Marker(
                         point: _locationOf(e.value),
@@ -283,14 +308,30 @@ class _ExploreScreenState extends State<ExploreScreen> {
                   const Icon(Icons.search, color: Colors.grey, size: 20),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Lima · Centro', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Colors.black)),
-                        Text('Mar 12 May → Jue 14 May', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
-                      ],
+                    child: TextField(
+                      key: const Key('explore_search_field'),
+                      controller: _searchController,
+                      onChanged: _onSearchChanged,
+                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Colors.black),
+                      decoration: InputDecoration(
+                        isDense: true,
+                        border: InputBorder.none,
+                        hintText: 'Buscar por marca o modelo...',
+                        hintStyle: TextStyle(color: Colors.grey[500], fontWeight: FontWeight.normal, fontSize: 14),
+                      ),
                     ),
                   ),
+                  if (_searchQuery.isNotEmpty)
+                    GestureDetector(
+                      onTap: () {
+                        _searchController.clear();
+                        _onSearchChanged('');
+                      },
+                      child: const Padding(
+                        padding: EdgeInsets.only(right: 8),
+                        child: Icon(Icons.close, color: Colors.grey, size: 18),
+                      ),
+                    ),
                   // US63 — was a dead, non-interactive icon; now opens the filter sheet
                   // and shows a filled badge when filters are active.
                   GestureDetector(
@@ -332,11 +373,11 @@ class _ExploreScreenState extends State<ExploreScreen> {
                     child: Row(
                       children: [
                         Text(
-                          _loading ? 'Cargando...' : '${_vehicles.length} coches cerca',
+                          _loading ? 'Cargando...' : '${_filteredVehicles.length} coches cerca',
                           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black),
                         ),
                         const Spacer(),
-                        if (_vehicles.isNotEmpty)
+                        if (_filteredVehicles.isNotEmpty)
                           GestureDetector(
                             onTap: _openAllVehicles,
                             child: const Text('Ver todos', style: TextStyle(color: kCyan, fontSize: 13, fontWeight: FontWeight.w500)),
@@ -358,16 +399,27 @@ class _ExploreScreenState extends State<ExploreScreen> {
                                   ],
                                 ),
                               )
-                            : _vehicles.isEmpty
-                                ? Center(child: Text('No hay vehículos disponibles por ahora', style: TextStyle(color: Colors.grey[400])))
+                            : _filteredVehicles.isEmpty
+                                ? Center(
+                                    child: Text(
+                                      _searchQuery.isEmpty
+                                          ? 'No hay vehículos disponibles por ahora'
+                                          : 'Ningún vehículo coincide con "$_searchQuery"',
+                                      style: TextStyle(color: Colors.grey[400]),
+                                    ),
+                                  )
                                 : ListView.builder(
                                     key: const Key('explore_vehicle_list'),
                                     controller: _bottomSheetScrollController,
                                     scrollDirection: Axis.horizontal,
                                     padding: const EdgeInsets.symmetric(horizontal: 16),
-                                    itemCount: _vehicles.length + (_hasMorePages ? 1 : 0),
+                                    // La paginación remota se pausa mientras hay una búsqueda activa:
+                                    // el filtro es local sobre lo ya cargado, así que agregar el
+                                    // sentinel de "cargar más" no tendría sentido (mezclaría índices
+                                    // filtrados con índices de _vehicles sin filtrar).
+                                    itemCount: _filteredVehicles.length + (_searchQuery.isEmpty && _hasMorePages ? 1 : 0),
                                     itemBuilder: (_, i) {
-                                      if (i >= _vehicles.length) {
+                                      if (i >= _filteredVehicles.length) {
                                         return const Padding(
                                           padding: EdgeInsets.symmetric(horizontal: 16),
                                           child: SizedBox(
@@ -381,14 +433,15 @@ class _ExploreScreenState extends State<ExploreScreen> {
                                           ),
                                         );
                                       }
+                                      final vehicle = _filteredVehicles[i];
                                       return _CarCard(
-                                        vehicle: _vehicles[i],
+                                        vehicle: vehicle,
                                         selected: _selectedIndex == i,
                                         onTap: () {
                                           setState(() => _selectedIndex = i);
-                                          _mapController.move(_locationOf(_vehicles[i]), 15);
+                                          _mapController.move(_locationOf(vehicle), 15);
                                         },
-                                        onDetail: () => context.push('/car-detail', extra: _vehicles[i]),
+                                        onDetail: () => context.push('/car-detail', extra: vehicle),
                                       );
                                     },
                                   ),
@@ -667,7 +720,7 @@ class _RadiusControl extends StatelessWidget {
           Text('Radio de búsqueda: ${radiusKm.toInt()} km', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black)),
           Slider(
             value: radiusKm,
-            min: 1, max: 50,
+            min: 1, max: 10,
             activeColor: kCyan,
             onChanged: onRadiusChanged,
           ),

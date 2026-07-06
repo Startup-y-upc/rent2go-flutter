@@ -78,7 +78,17 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
             ),
           ),
           Positioned(
-            bottom: 24, left: 20, right: 20,
+            // Bugfix: a hardcoded `bottom: 24` placed this button under the
+            // Android gesture/nav bar on devices with a taller system inset,
+            // blocking taps. Adding the real bottom safe-area inset
+            // (MediaQuery padding.bottom) on top of the visual margin makes
+            // the button land above the system bar on every device, matching
+            // the Scaffold.bottomNavigationBar + SafeArea(top: false) fix
+            // already applied in car_detail_screen.dart (this screen keeps
+            // its Stack layout for the tap-to-pick map, so the offset is
+            // added here instead of switching to bottomNavigationBar).
+            bottom: 24 + MediaQuery.of(context).padding.bottom,
+            left: 20, right: 20,
             child: SizedBox(
               height: 52,
               child: ElevatedButton(
