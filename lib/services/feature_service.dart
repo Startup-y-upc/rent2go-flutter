@@ -4,11 +4,11 @@ import '../models/vehicle_models.dart';
 
 /// Cliente para el catálogo de features/amenidades de vehículo.
 ///
-/// Alcance actual: solo lectura (GET /api/v1/features), usada para poblar la
-/// selección múltiple en add_vehicle_screen.dart / edit_vehicle_screen.dart.
-/// Los endpoints de administración de catálogo (POST/PUT/DELETE /features)
-/// existen en el backend pero no se consumen desde Flutter — eso es
-/// administración de catálogo, fuera de alcance de esta pantalla.
+/// GET /api/v1/features — lectura, usada para poblar la selección múltiple en
+/// add_vehicle_screen.dart / edit_vehicle_screen.dart.
+/// POST /api/v1/features — permite crear un feature nuevo directamente desde
+/// el formulario de vehículo cuando el usuario no encuentra el que necesita
+/// en el catálogo existente (queda disponible para futuros vehículos también).
 class FeatureService {
   static const String baseUrl = 'https://rent2go-backend-production.up.railway.app/api/v1';
 
@@ -27,5 +27,28 @@ class FeatureService {
       // Sin conexión o backend caído: se degrada a lista vacía.
     }
     return [];
+  }
+
+  /// POST /api/v1/features — crea un nuevo feature en el catálogo.
+  /// Body: { "name": "..." } (description/iconUrl son opcionales en el
+  /// backend, no se envían desde este formulario).
+  /// Devuelve el VehicleFeature creado con el id real asignado por el
+  /// backend. Lanza Exception con un mensaje de usuario si falla (409 = ya
+  /// existe un feature con ese nombre, u otro error de red/servidor).
+  static Future<VehicleFeature> createFeature(String name) async {
+    final uri = Uri.parse('$baseUrl/features');
+    final response = await http.post(
+      uri,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'name': name}),
+    );
+
+    if (response.statusCode == 201) {
+      return VehicleFeature.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    }
+    if (response.statusCode == 409) {
+      throw Exception('Ya existe una característica con ese nombre');
+    }
+    throw Exception('No se pudo crear la característica');
   }
 }

@@ -45,6 +45,11 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
   final Set<String> _selectedFeatureNames = {};
   bool _loadingFeatures = true;
 
+  // Alta de features nuevos desde este mismo formulario — POST /api/v1/features.
+  // El feature creado se agrega al catálogo local y queda seleccionado.
+  final _newFeatureCtrl = TextEditingController();
+  bool _creatingFeature = false;
+
   bool _loadingCategories = true;
   bool _saving = false;
   String? _errorMsg;
@@ -67,6 +72,45 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
   Future<void> _loadFeatures() async {
     final features = await FeatureService.getFeatures();
     if (mounted) setState(() { _availableFeatures = features; _loadingFeatures = false; });
+  }
+
+  /// Agrega una característica nueva al catálogo (POST /api/v1/features) y la
+  /// selecciona automáticamente. Si ya existe una con el mismo nombre
+  /// (comparación case-insensitive) en la lista local, simplemente la
+  /// selecciona en vez de crear un duplicado.
+  Future<void> _addNewFeature() async {
+    final name = _newFeatureCtrl.text.trim();
+    if (name.isEmpty) return;
+
+    final matches = _availableFeatures.where(
+      (f) => f.name.toLowerCase() == name.toLowerCase(),
+    );
+    if (matches.isNotEmpty) {
+      final existing = matches.first;
+      setState(() {
+        _selectedFeatureNames.add(existing.name);
+        _newFeatureCtrl.clear();
+      });
+      return;
+    }
+
+    setState(() => _creatingFeature = true);
+    try {
+      final created = await FeatureService.createFeature(name);
+      if (!mounted) return;
+      setState(() {
+        _availableFeatures = [..._availableFeatures, created];
+        _selectedFeatureNames.add(created.name);
+        _newFeatureCtrl.clear();
+        _creatingFeature = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _creatingFeature = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', '')), backgroundColor: Colors.redAccent),
+      );
+    }
   }
 
   Future<void> _pickImage() async {
@@ -165,6 +209,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
     _locationCtrl.dispose();
     _descCtrl.dispose();
     _seatsCtrl.dispose();
+    _newFeatureCtrl.dispose();
     super.dispose();
   }
 
@@ -388,6 +433,46 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
                           );
                         }).toList(),
                       ),
+            const SizedBox(height: 10),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _newFeatureCtrl,
+                    enabled: !_creatingFeature,
+                    style: const TextStyle(color: Colors.black, fontSize: 14),
+                    decoration: InputDecoration(
+                      hintText: 'Agregar otra característica...',
+                      isDense: true,
+                      filled: true,
+                      fillColor: Colors.white,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: Colors.grey.shade300)),
+                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: Colors.grey.shade300)),
+                    ),
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => _addNewFeature(),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  height: 44,
+                  child: ElevatedButton(
+                    onPressed: _creatingFeature ? null : _addNewFeature,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.black,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                    ),
+                    child: _creatingFeature
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.add, size: 20),
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 28),
 
             SizedBox(
