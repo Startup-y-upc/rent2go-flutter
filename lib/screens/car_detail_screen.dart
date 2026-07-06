@@ -73,7 +73,13 @@ class _CarDetailScreenState extends State<CarDetailScreen> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: colorScheme.surface,
+      // Bugfix: colorScheme.surface resolves to the app's dark-theme navy
+      // (0xFF16213E, see main.dart's ColorScheme.dark), which reads as a wrong
+      // blue background here. Every other renter-facing screen in this app
+      // (reservation_detail_screen.dart, bookings_screen.dart) uses a plain
+      // white/light background instead of trusting the global dark ColorScheme
+      // — this screen must match that established convention.
+      backgroundColor: Colors.white,
       body: Stack(
         children: [
           SingleChildScrollView(

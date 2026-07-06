@@ -192,12 +192,19 @@ class _ReservationDetailScreenState extends State<ReservationDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Reserva ${_reservation.reservationCode}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black)),
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(color: kCyan.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(20)),
-              child: Text(_reservation.status, style: const TextStyle(color: kCyan, fontWeight: FontWeight.bold, fontSize: 12)),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Reserva ${_reservation.reservationCode}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black)),
+                // Parity with Kotlin's BookingDetailHeader: status-specific color
+                // (not always cyan) via _statusColor/_statusLabel below.
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(color: _statusColor(_reservation.status).withValues(alpha: 0.15), borderRadius: BorderRadius.circular(12)),
+                  child: Text(_statusLabel(_reservation.status), style: TextStyle(color: _statusColor(_reservation.status), fontWeight: FontWeight.bold, fontSize: 13)),
+                ),
+              ],
             ),
             const SizedBox(height: 20),
             _buildVehicleSection(),
@@ -223,9 +230,26 @@ class _ReservationDetailScreenState extends State<ReservationDetailScreen> {
             _row('Punto de recogida', _reservation.pickupLocation),
             _row('Punto de devolución', _reservation.returnLocation),
             _row('Cobertura', _reservation.coveragePlan),
-            _row('Total', 'S/ ${_reservation.totalAmount.toStringAsFixed(2)}'),
-            if (_reservation.damageReport != null && _reservation.damageReport!.isNotEmpty)
+            const SizedBox(height: 6),
+            // Parity with Kotlin's BookingDetailAmountCard: a distinct, visually
+            // highlighted "total paid" card instead of a plain label/value row.
+            _buildAmountCard(),
+            if (_reservation.pickupConfirmedAt != null || _reservation.returnConfirmedAt != null) ...[
+              const SizedBox(height: 16),
+              _buildConfirmationsCard(),
+            ],
+            if (_reservation.pickupPhotos.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              _buildPhotosCard('Fotos de recogida', _reservation.pickupPhotos, key: 'reservation_detail_pickup_photos'),
+            ],
+            if (_reservation.returnPhotos.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              _buildPhotosCard('Fotos de devolución', _reservation.returnPhotos, key: 'reservation_detail_return_photos'),
+            ],
+            if (_reservation.damageReport != null && _reservation.damageReport!.isNotEmpty) ...[
+              const SizedBox(height: 12),
               _row('Reporte de daños', _reservation.damageReport!),
+            ],
             if (_retryError != null) ...[
               const SizedBox(height: 8),
               Container(
@@ -492,6 +516,138 @@ class _ReservationDetailScreenState extends State<ReservationDetailScreen> {
             Text(label, style: TextStyle(color: Colors.grey[500], fontSize: 12)),
             const SizedBox(height: 2),
             Text(value, style: const TextStyle(color: Colors.black, fontSize: 15, fontWeight: FontWeight.w600)),
+          ],
+        ),
+      );
+
+  /// Parity with Kotlin's getStatusColor(status) in BookingDetailScreen.kt —
+  /// same per-status palette, so the badge is no longer always cyan regardless
+  /// of the reservation's actual status.
+  Color _statusColor(String status) {
+    switch (status.toUpperCase()) {
+      case 'PENDING':
+        return const Color(0xFFE6A23C);
+      case 'CONFIRMED':
+        return kCyan;
+      case 'ACTIVE':
+        return const Color(0xFF67C23A);
+      case 'COMPLETED':
+        return Colors.grey;
+      case 'CANCELLED':
+        return const Color(0xFFF56C6C);
+      case 'EXPIRED':
+        return Colors.grey;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  /// Parity with Kotlin's getStatusText(status).
+  String _statusLabel(String status) {
+    switch (status.toUpperCase()) {
+      case 'PENDING':
+        return 'Pendiente';
+      case 'CONFIRMED':
+        return 'Confirmada';
+      case 'ACTIVE':
+        return 'Activa';
+      case 'COMPLETED':
+        return 'Completada';
+      case 'CANCELLED':
+        return 'Cancelada';
+      case 'EXPIRED':
+        return 'Expirada';
+      default:
+        return status;
+    }
+  }
+
+  /// Parity with Kotlin's BookingDetailAmountCard: a distinct, highlighted
+  /// "Total pagado" card (dark background, large cyan amount) instead of a
+  /// plain label/value row like every other field on this screen.
+  Widget _buildAmountCard() => Container(
+        key: const Key('reservation_detail_amount_card'),
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(color: kCardBg, borderRadius: BorderRadius.circular(12)),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('Total pagado', style: TextStyle(fontSize: 15, color: Colors.white70)),
+            Text(
+              'S/ ${_reservation.totalAmount.toStringAsFixed(2)}',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 24, color: kCyan),
+            ),
+          ],
+        ),
+      );
+
+  /// Parity with Kotlin's BookingDetailConfirmationsCard — previously absent
+  /// from Flutter despite ReservationData already carrying both timestamps.
+  Widget _buildConfirmationsCard() => Container(
+        key: const Key('reservation_detail_confirmations_card'),
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(color: Colors.grey[50], borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade200)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Confirmaciones', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black)),
+            const SizedBox(height: 12),
+            if (_reservation.pickupConfirmedAt != null)
+              _confirmationRow('Recogida confirmada', _reservation.pickupConfirmedAt!),
+            if (_reservation.pickupConfirmedAt != null && _reservation.returnConfirmedAt != null)
+              const SizedBox(height: 8),
+            if (_reservation.returnConfirmedAt != null)
+              _confirmationRow('Devolución confirmada', _reservation.returnConfirmedAt!),
+          ],
+        ),
+      );
+
+  Widget _confirmationRow(String label, String value) => Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.check_circle, size: 18, color: kCyan),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+              Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.black)),
+            ],
+          ),
+        ],
+      );
+
+  /// Parity with Kotlin's BookingDetailPhotosCard (pickup/return photos) —
+  /// previously absent from Flutter despite ReservationData already carrying
+  /// both photo lists.
+  Widget _buildPhotosCard(String title, List<String> photos, {required String key}) => Container(
+        key: Key(key),
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(color: Colors.grey[50], borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade200)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black)),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: photos
+                  .map((url) => ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: CachedNetworkImage(
+                          imageUrl: url,
+                          width: 80,
+                          height: 80,
+                          fit: BoxFit.cover,
+                          errorWidget: (_, __, ___) => Container(width: 80, height: 80, color: Colors.grey[300], child: const Icon(Icons.broken_image)),
+                        ),
+                      ))
+                  .toList(),
+            ),
           ],
         ),
       );
