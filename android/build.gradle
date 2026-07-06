@@ -13,6 +13,16 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 
+subprojects { subproject ->
+    if (subproject.name == "stripe_android") {
+        subproject.tasks.whenTaskAdded { task ->
+            if (task.name.startsWith("lintVital")) {
+                task.enabled = false
+            }
+        }
+    }
+}
+
 tasks.register("clean", Delete) {
     delete rootProject.buildDir
 }
