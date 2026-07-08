@@ -260,6 +260,8 @@ class WithdrawalException implements Exception {
   String toString() => message;
 }
 
+/// Service responsible for managing all payment transactions, stripe billing,
+/// withdrawals/payouts, and coverage plans.
 class PaymentsService {
   static const String baseUrl = 'https://rent2go-backend-production.up.railway.app/api/v1';
 
