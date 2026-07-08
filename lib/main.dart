@@ -33,13 +33,10 @@ import 'screens/favorites_screen.dart';
 import 'services/auth_service.dart';
 import 'models/vehicle_models.dart';
 
-// Stripe test-mode publishable key (US58/TS16). Client-side publishable key —
-// safe to ship in the app binary. Must match the Stripe TEST account whose
-// secret key (STRIPE_SECRET_KEY) the backend currently targets, or PaymentIntent
-// confirmation will fail with a "no such payment_intent"/authentication-style
-// error that can present to the user as a generic decline. Override at build
-// time with --dart-define=STRIPE_PUBLISHABLE_KEY=pk_test_... if testing against
-// a different Stripe test account than the one below.
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
+
+
 const String kStripePublishableKey = String.fromEnvironment(
   'STRIPE_PUBLISHABLE_KEY',
   defaultValue:
@@ -65,6 +62,9 @@ void main() async {
     Stripe.publishableKey = kStripePublishableKey;
     await Stripe.instance.applySettings();
   }
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(const Rent2GoApp());
 }
 
