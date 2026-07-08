@@ -11,7 +11,7 @@ import '../services/payments_service.dart';
 import '../services/reservation_service.dart';
 import '../services/vehicle_service.dart';
 import '../widgets/common_widgets.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:web/web.dart' as web;
 
 /// Vista de detalle de una reserva real (ReservationResource), abierta desde
 /// "Abrir" en bookings_screen.dart (renter) u owner_dashboard_screen.dart (owner).
@@ -101,10 +101,7 @@ class _ReservationDetailScreenState extends State<ReservationDetailScreen> {
 
         final uri = Uri.parse(checkoutUrl);
 
-        if (!await launchUrl(uri)) {
-          throw Exception("No se pudo abrir Stripe Checkout");
-        }
-
+        web.window.location.href = checkoutUrl;
         return;
       }
 
