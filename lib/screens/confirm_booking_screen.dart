@@ -9,7 +9,7 @@ import '../services/payments_service.dart';
 import '../services/reservation_service.dart';
 import '../services/vehicle_service.dart';
 import '../widgets/common_widgets.dart';
-import 'package:web/web.dart' as web;
+import '../services/payment_redirect.dart';
 
 class ConfirmBookingScreen extends StatefulWidget {
   final VehicleData vehicle;
@@ -410,8 +410,12 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
           reservationId: reservation.id,
           amountCents: (fare.total * 100).round(),
         );
+        print("Checkout URL: $checkoutUrl");
 
-        web.window.location.href = checkoutUrl;
+        redirectToCheckout(checkoutUrl);
+
+        print("Después del redirect");
+
         return;
       }
 

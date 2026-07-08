@@ -1,0 +1,1 @@
+void redirectToCheckout(String url) {}

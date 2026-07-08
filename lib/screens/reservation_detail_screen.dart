@@ -11,7 +11,7 @@ import '../services/payments_service.dart';
 import '../services/reservation_service.dart';
 import '../services/vehicle_service.dart';
 import '../widgets/common_widgets.dart';
-import 'package:web/web.dart' as web;
+import '../services/payment_redirect.dart';
 
 /// Vista de detalle de una reserva real (ReservationResource), abierta desde
 /// "Abrir" en bookings_screen.dart (renter) u owner_dashboard_screen.dart (owner).
@@ -50,6 +50,26 @@ class _ReservationDetailScreenState extends State<ReservationDetailScreen> {
     super.initState();
     _reservation = widget.reservation;
     _loadVehicle();
+    _syncPendingReservationOnEntry();
+  }
+
+  Future<void> _syncPendingReservationOnEntry() async {
+    if (!_needsPayment) return;
+
+    try {
+      await PaymentsService.syncPayment(_reservation.id);
+    } catch (_) {
+      // Non-fatal: si la sincronización falla, la pantalla aún puede mostrar datos.
+    }
+
+    if (!mounted) return;
+
+    final refreshed = await ReservationService.getReservation(_reservation.id);
+    if (!mounted || refreshed == null) return;
+
+    setState(() {
+      _reservation = refreshed;
+    });
   }
 
   Future<void> _loadVehicle() async {
@@ -99,9 +119,12 @@ class _ReservationDetailScreenState extends State<ReservationDetailScreen> {
           amountCents: (_reservation.totalAmount * 100).round(),
         );
 
-        final uri = Uri.parse(checkoutUrl);
+        print("Checkout URL: $checkoutUrl");
 
-        web.window.location.href = checkoutUrl;
+        redirectToCheckout(checkoutUrl);
+
+        print("Después del redirect");
+
         return;
       }
 
