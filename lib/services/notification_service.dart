@@ -73,6 +73,9 @@ class NotificationException implements Exception {
   String toString() => message;
 }
 
+/// Service responsible for managing user in-app notifications.
+/// Integrates with the backend notifications API to fetch paginated alerts
+/// and mark them as read.
 class NotificationService {
   static const String baseUrl = 'https://rent2go-backend-production.up.railway.app/api/v1';
 
