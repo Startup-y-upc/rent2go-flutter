@@ -5,6 +5,8 @@ import 'owner_messages_screen.dart';
 import 'owner_earnings_screen.dart';
 import 'owner_profile_screen.dart';
 import '../widgets/common_widgets.dart';
+import '../services/auth_service.dart';
+import '../services/message_service.dart';
 
 class OwnerMainScreen extends StatefulWidget {
   const OwnerMainScreen({super.key});
@@ -16,6 +18,24 @@ class OwnerMainScreen extends StatefulWidget {
 class _OwnerMainScreenState extends State<OwnerMainScreen> {
   int _currentIndex = 0;
   bool _showEarningsInsideProfile = false;
+
+  // Simple activity dot, not a numeric count — see BottomNavBar in
+  // explore_screen.dart for the full rationale (avoids the N+1 fetch of every
+  // conversation's full message history just to count unread items).
+  bool _hasActivity = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadActivity();
+  }
+
+  Future<void> _loadActivity() async {
+    final me = await AuthService.getCurrentUser();
+    if (me == null) return;
+    final hasActivity = await MessageService.hasRecentActivity(me.userId);
+    if (mounted) setState(() => _hasActivity = hasActivity);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -67,6 +87,7 @@ class _OwnerMainScreenState extends State<OwnerMainScreen> {
 
   Widget _buildNavItem(int index, IconData icon, IconData activeIcon, String label) {
     final bool isActive = _currentIndex == index;
+    final isMessagesTab = index == 2;
     return GestureDetector(
       onTap: () {
         setState(() {
@@ -78,7 +99,21 @@ class _OwnerMainScreenState extends State<OwnerMainScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(isActive ? activeIcon : icon, color: isActive ? kCyan : Colors.grey, size: 24),
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Icon(isActive ? activeIcon : icon, color: isActive ? kCyan : Colors.grey, size: 24),
+              if (isMessagesTab && _hasActivity)
+                Positioned(
+                  right: -2, top: -2,
+                  child: Container(
+                    key: const Key('owner_bottom_nav_messages_unread_dot'),
+                    width: 8, height: 8,
+                    decoration: const BoxDecoration(color: kCyan, shape: BoxShape.circle),
+                  ),
+                ),
+            ],
+          ),
           const SizedBox(height: 4),
           Text(
             label,

@@ -1,10 +1,11 @@
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import '../models/user_model.dart';
+import '../models/vehicle_models.dart';
 import '../services/auth_service.dart';
+import '../services/vehicle_service.dart';
 import '../widgets/common_widgets.dart';
 
 class OwnerProfileScreen extends StatefulWidget {
@@ -21,11 +22,17 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
   bool _editing = false;
   bool _saving = false;
   String? _errorMsg;
+  bool _resendingVerification = false;
 
   final _nameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   Uint8List? _newImageBytes;
   final _picker = ImagePicker();
+
+  // Fix 2 — paste-code verification dialog state.
+  final _verificationCodeCtrl = TextEditingController();
+  bool _verifyingCode = false;
+  String? _verifyCodeError;
 
   @override
   void initState() {
@@ -37,6 +44,7 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
   void dispose() {
     _nameCtrl.dispose();
     _phoneCtrl.dispose();
+    _verificationCodeCtrl.dispose();
     super.dispose();
   }
 
@@ -71,6 +79,183 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
     if (img == null) return;
     final bytes = await img.readAsBytes();
     setState(() => _newImageBytes = bytes);
+  }
+
+  /// Wires the previously dead "Foto de perfil / Verificar" stub to the same
+  /// pick+upload flow already used by the avatar tap in edit mode (Phase 0
+  /// parity finding: Kotlin's equivalent row already triggers an upload;
+  /// Flutter's showed a "Verificar" label with no action).
+  Future<void> _pickAndUploadProfilePhoto() async {
+    final img = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+    if (img == null) return;
+    final bytes = await img.readAsBytes();
+    setState(() => _saving = true);
+    try {
+      final updated = await AuthService.updateProfile(
+        fullName: _user?.fullName ?? '',
+        phone: _user?.phone ?? '',
+        profileImageBytes: bytes,
+        imageFilename: 'profile.jpg',
+      );
+      if (mounted) {
+        setState(() {
+          _user = updated;
+          _saving = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Foto de perfil actualizada'), backgroundColor: Colors.green),
+        );
+      }
+    } on AuthException catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message), backgroundColor: Colors.redAccent),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No se pudo conectar al servidor.'), backgroundColor: Colors.redAccent),
+        );
+      }
+    }
+  }
+
+  /// Combined re-verification action for BOTH the email row and the phone row.
+  /// email_verified is a real backend flag with an actionable resend flow
+  /// (POST /auth/verify/resend). phone_verified, per User.java's
+  /// computePhoneVerified(), is a computed rule-based flag (Peru mobile format
+  /// 9XXXXXXXX) with NO OTP/SMS action — it just reflects the phone value
+  /// already on file. So "re-verify both" here means: (a) trigger the real
+  /// email resend, and (b) refresh /auth/me so both badges — email and the
+  /// computed phone flag — reflect the latest true state. There is no second
+  /// backend call for phone; refreshing IS its "reverification". The feedback
+  /// message intentionally avoids implying an SMS/OTP was sent for phone.
+  Future<void> _reverifyEmailAndPhone() async {
+    setState(() => _resendingVerification = true);
+    try {
+      await AuthService.resendVerificationEmail();
+      final fresh = await AuthService.fetchCurrentUser();
+      if (mounted) {
+        setState(() {
+          if (fresh != null) _user = fresh;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Reenviando verificación de correo y actualizando estado...'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } on AuthException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message), backgroundColor: Colors.redAccent),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No se pudo conectar al servidor.'), backgroundColor: Colors.redAccent),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _resendingVerification = false);
+    }
+  }
+
+  /// Fix 2 — opens the paste-code dialog (alternative to a clickable magic
+  /// link): the user copies the token/code they received by email and pastes
+  /// it here to call POST /auth/verify directly with their own userId.
+  Future<void> _openVerifyCodeDialog() async {
+    _verificationCodeCtrl.clear();
+    setState(() => _verifyCodeError = null);
+
+    await showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: const Text('Verificar correo'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Pega el código que recibiste por correo electrónico.'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _verificationCodeCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Código de verificación',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              if (_verifyCodeError != null) ...[
+                const SizedBox(height: 8),
+                Text(_verifyCodeError!, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: _verifyingCode
+                  ? null
+                  : () async {
+                      final code = _verificationCodeCtrl.text.trim();
+                      if (code.isEmpty) {
+                        setDialogState(() => _verifyCodeError = 'Ingresa el código recibido por correo');
+                        setState(() => _verifyCodeError = 'Ingresa el código recibido por correo');
+                        return;
+                      }
+                      final userId = _user?.userId;
+                      if (userId == null) return;
+
+                      setDialogState(() => _verifyingCode = true);
+                      setState(() => _verifyingCode = true);
+                      try {
+                        final ok = await AuthService.verifyEmail(userId: userId, token: code);
+                        if (ok) {
+                          final fresh = await AuthService.fetchCurrentUser();
+                          if (mounted) {
+                            setState(() {
+                              if (fresh != null) _user = fresh;
+                              _verifyCodeError = null;
+                            });
+                          }
+                          if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Correo verificado correctamente'), backgroundColor: Colors.green),
+                            );
+                          }
+                        } else {
+                          setDialogState(() => _verifyCodeError = 'Código inválido o expirado');
+                          setState(() => _verifyCodeError = 'Código inválido o expirado');
+                        }
+                      } on AuthException catch (e) {
+                        setDialogState(() => _verifyCodeError = e.message);
+                        setState(() => _verifyCodeError = e.message);
+                      } catch (_) {
+                        setDialogState(() => _verifyCodeError = 'No se pudo conectar al servidor.');
+                        setState(() => _verifyCodeError = 'No se pudo conectar al servidor.');
+                      } finally {
+                        setDialogState(() => _verifyingCode = false);
+                        if (mounted) setState(() => _verifyingCode = false);
+                      }
+                    },
+              child: _verifyingCode
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Text('Verificar'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _save() async {
@@ -143,9 +328,10 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
     final email = user?.email ?? '';
     final emailVerified = user?.emailVerified ?? false;
     final phoneVerified = user?.phoneVerified ?? false;
-    // DNI y Carnet de conducir se muestran como verificados de forma estática
-    // (no dependen de ningún dato real del backend, son solo visuales por ahora).
-    final verifiedCount = (emailVerified ? 1 : 0) + (phoneVerified ? 1 : 0) + 2;
+    // F4: KYC (DNI/Carnet) refleja el campo real kyc_verified del backend,
+    // ya no un valor hardcodeado en true.
+    final kycVerified = user?.kycVerified ?? false;
+    final verifiedCount = (emailVerified ? 1 : 0) + (phoneVerified ? 1 : 0) + (kycVerified ? 2 : 0);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF0F4F8),
@@ -208,12 +394,12 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
                     child: Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.grey.shade200)),
-                      child: Row(
+                      child: const Row(
                         children: [
-                          const Icon(Icons.attach_money, color: kCyan),
-                          const SizedBox(width: 12),
-                          const Expanded(child: Text('Ver mis ganancias', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.black))),
-                          const Icon(Icons.chevron_right, color: Colors.grey),
+                          Icon(Icons.attach_money, color: kCyan),
+                          SizedBox(width: 12),
+                          Expanded(child: Text('Ver mis ganancias', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.black))),
+                          Icon(Icons.chevron_right, color: Colors.grey),
                         ],
                       ),
                     ),
@@ -232,15 +418,68 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
                           const Text('Confianza y verificación', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black)),
                           const Spacer(),
                           Text('$verifiedCount / 4', style: TextStyle(color: verifiedCount == 4 ? kCyan : Colors.grey[500], fontWeight: FontWeight.bold)),
+                          // US61 — header-level refresh, since verification state can change
+                          // server-side (e.g. after clicking an email link) without the app
+                          // knowing; re-fetches /auth/me to update all 4 badges at once.
+                          IconButton(
+                            icon: const Icon(Icons.refresh, size: 18, color: Colors.grey),
+                            tooltip: 'Actualizar estado de verificación',
+                            onPressed: _loadUser,
+                            constraints: const BoxConstraints(),
+                            padding: const EdgeInsets.only(left: 6),
+                            visualDensity: VisualDensity.compact,
+                          ),
                         ],
                       ),
                       const SizedBox(height: 4),
                       LinearProgressIndicator(value: verifiedCount / 4, backgroundColor: Colors.grey.shade100, color: kCyan, minHeight: 4, borderRadius: BorderRadius.circular(2)),
                       const SizedBox(height: 14),
-                      const _VerifyRow(label: 'Identidad (DNI)', verified: true),
-                      const _VerifyRow(label: 'Carnet de conducir', verified: true),
-                      _VerifyRow(label: 'Email y teléfono', verified: emailVerified && phoneVerified),
-                      const _VerifyRow(label: 'Foto de perfil', verified: false, action: 'Verificar'),
+                      _VerifyRow(
+                        label: 'Identidad (DNI y licencia)',
+                        verified: kycVerified,
+                        action: kycVerified ? null : 'Verificar',
+                        onAction: () => context.push('/verify-identity'),
+                      ),
+                      // Two separate rows (matches Kotlin's ProfileScreen.kt VerificationItem
+                      // pattern). Tapping EITHER row re-verifies both at once: resends the
+                      // email verification link AND refreshes /auth/me so both badges reflect
+                      // the current true state. Phone has no independent OTP/SMS action — its
+                      // badge is purely recomputed from the refreshed phone value on file.
+                      // US61 — action only shown while genuinely unverified, matching the
+                      // KYC row's already-correct pattern above (no "Reverificar" once verified).
+                      _VerifyRow(
+                        label: 'Correo verificado',
+                        verified: emailVerified,
+                        action: emailVerified ? null : (_resendingVerification ? 'Enviando...' : 'Reverificar'),
+                        onAction: emailVerified ? null : (_resendingVerification ? null : _reverifyEmailAndPhone),
+                      ),
+                      // Fix 2 — paste-code alternative to a clickable magic link.
+                      if (!emailVerified)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 32, bottom: 4),
+                          child: GestureDetector(
+                            onTap: _openVerifyCodeDialog,
+                            child: const Text(
+                              'Ingresar código',
+                              style: TextStyle(color: kCyan, fontSize: 12, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                      // US61 — phone verification is format-only (no SMS/OTP, per prior sprint
+                      // constraint); there is no resend/reverify action that makes sense here,
+                      // so the action is dropped entirely rather than conditionally shown.
+                      _VerifyRow(
+                        label: 'Teléfono verificado',
+                        verified: phoneVerified,
+                        action: null,
+                        onAction: null,
+                      ),
+                      _VerifyRow(
+                        label: 'Foto de perfil',
+                        verified: user?.profileImageUrl != null && user!.profileImageUrl!.isNotEmpty,
+                        action: (user?.profileImageUrl != null && user!.profileImageUrl!.isNotEmpty) ? null : 'Verificar',
+                        onAction: _pickAndUploadProfilePhoto,
+                      ),
                     ],
                   ),
                 ),
@@ -269,7 +508,7 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
                           width: double.infinity,
                           padding: const EdgeInsets.all(10),
                           margin: const EdgeInsets.only(bottom: 12),
-                          decoration: BoxDecoration(color: Colors.red.withOpacity(0.08), borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.redAccent.withOpacity(0.3))),
+                          decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3))),
                           child: Text(_errorMsg!, style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
                         ),
                       ],
@@ -328,11 +567,54 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
                 const SizedBox(height: 12),
 
                 _SectionCard(
+                  child: FutureBuilder<List<VehicleData>>(
+                    future: VehicleService.getMyVehicles(),
+                    builder: (context, snapshot) {
+                      final myCars = snapshot.data ?? const <VehicleData>[];
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Mi negocio', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black)),
+                          const SizedBox(height: 12),
+                          if (snapshot.connectionState == ConnectionState.waiting)
+                            const Padding(
+                              padding: EdgeInsets.all(16.0),
+                              child: Center(child: CircularProgressIndicator()),
+                            )
+                          else if (snapshot.hasError)
+                            const Padding(
+                              padding: EdgeInsets.all(16.0),
+                              child: Text('No se pudo cargar tus vehículos', style: TextStyle(color: Colors.grey)),
+                            )
+                          else
+                            _buildBusinessSection(myCars),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                _SectionCard(
                   child: Column(
                     children: [
-                      _OptionRow(icon: Icons.notifications_outlined, label: 'Notificaciones'),
+                      _OptionRow(
+                        icon: Icons.notifications_outlined,
+                        label: 'Notificaciones',
+                        onTap: () => context.push('/notifications'),
+                      ),
                       const Divider(height: 1),
-                      _OptionRow(icon: Icons.help_outline, label: 'Ayuda'),
+                      _OptionRow(
+                        icon: Icons.description_outlined,
+                        label: 'Términos y Condiciones',
+                        onTap: () => context.push('/terms'),
+                      ),
+                      const Divider(height: 1),
+                      _OptionRow(
+                        icon: Icons.help_outline,
+                        label: 'Ayuda',
+                        onTap: () => context.push('/help'),
+                      ),
                       const Divider(height: 1),
                       _OptionRow(
                         icon: Icons.logout, label: 'Cerrar sesión', color: Colors.red,
@@ -350,6 +632,58 @@ class _OwnerProfileScreenState extends State<OwnerProfileScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildBusinessSection(List<VehicleData> myCars) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        children: myCars.isEmpty
+            ? [
+                const Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Text('No hay vehículos registrados', style: TextStyle(color: Colors.grey)),
+                )
+              ]
+            : myCars.map((car) => Column(
+                children: [
+                  _buildBusinessItem(car.name, car.status, car.primaryImageUrl),
+                  if (car != myCars.last) const Divider(height: 1),
+                ],
+              )).toList(),
+      ),
+    );
+  }
+
+  // F5: mismo patrón de fallback local usado en owner_vehicles_screen.dart —
+  // ya no se usa una URL externa de unsplash cuando el vehículo no tiene foto.
+  Widget _buildBusinessItem(String title, String subtitle, String? imageUrl) {
+    return ListTile(
+      leading: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: (imageUrl != null && imageUrl.isNotEmpty)
+            ? Image.network(
+                imageUrl,
+                width: 48, height: 36, fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(
+                  width: 48, height: 36, color: Colors.grey[200],
+                  child: const Icon(Icons.directions_car, color: Colors.grey, size: 18),
+                ),
+              )
+            : Container(
+                width: 48, height: 36, color: Colors.grey[200],
+                child: const Icon(Icons.directions_car, color: Colors.grey, size: 18),
+              ),
+      ),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black)),
+      subtitle: Text(subtitle, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+      trailing: const Icon(Icons.chevron_right, size: 20),
+      onTap: () {},
     );
   }
 }
@@ -370,7 +704,8 @@ class _VerifyRow extends StatelessWidget {
   final String label;
   final bool verified;
   final String? action;
-  const _VerifyRow({required this.label, required this.verified, this.action});
+  final VoidCallback? onAction;
+  const _VerifyRow({required this.label, required this.verified, this.action, this.onAction});
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 6),
@@ -380,10 +715,16 @@ class _VerifyRow extends StatelessWidget {
         const SizedBox(width: 12),
         Text(label, style: const TextStyle(fontSize: 14, color: Colors.black)),
         const Spacer(),
-        if (action != null && !verified)
-          Text(action!, style: TextStyle(color: Colors.blue[600], fontSize: 13, fontWeight: FontWeight.w500))
-        else
-          Text(verified ? 'Verificado' : 'Pendiente', style: TextStyle(color: verified ? Colors.green : Colors.orange[700], fontSize: 12, fontWeight: FontWeight.w500)),
+        Text(verified ? 'Verificado' : 'Pendiente', style: TextStyle(color: verified ? Colors.green : Colors.orange[700], fontSize: 12, fontWeight: FontWeight.w500)),
+        // Action stays tappable even when already verified (e.g. "Reverificar")
+        // so re-verification/refresh flows aren't limited to the unverified state.
+        if (action != null) ...[
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: onAction,
+            child: Text(action!, style: TextStyle(color: Colors.blue[600], fontSize: 13, fontWeight: FontWeight.w500)),
+          ),
+        ],
       ],
     ),
   );

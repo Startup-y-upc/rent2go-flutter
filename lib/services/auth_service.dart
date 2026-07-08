@@ -149,6 +149,44 @@ class AuthService {
         statusCode: response.statusCode);
   }
 
+  /// POST /api/v1/auth/kyc/multipart — envía los documentos de verificación
+  /// (US07). Requiere una sesión activa (token + userId), por lo que debe
+  /// llamarse después de register()/login(), nunca antes.
+  static Future<void> submitKycMultipart({
+    required int userId,
+    required String fullName,
+    required String idNumber,
+    required Uint8List dniFrontBytes,
+    required Uint8List dniBackBytes,
+    Uint8List? driverLicenseBytes,
+  }) async {
+    final token = await getToken();
+    if (token == null) throw AuthException('No hay sesión activa');
+
+    final uri = Uri.parse('$baseUrl/auth/kyc/multipart');
+    final request = http.MultipartRequest('POST', uri);
+    request.headers['Authorization'] = 'Bearer $token';
+    request.fields['userId'] = userId.toString();
+    request.fields['fullName'] = fullName;
+    request.fields['idNumber'] = idNumber;
+
+    request.files.add(http.MultipartFile.fromBytes('dniFront', dniFrontBytes, filename: 'dni_front.jpg'));
+    request.files.add(http.MultipartFile.fromBytes('dniBack', dniBackBytes, filename: 'dni_back.jpg'));
+    if (driverLicenseBytes != null) {
+      request.files.add(http.MultipartFile.fromBytes('driverLicense', driverLicenseBytes, filename: 'driver_license.jpg'));
+    }
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return;
+    }
+
+    throw AuthException(_extractMessage(response, 'No se pudieron enviar los documentos de verificación'),
+        statusCode: response.statusCode);
+  }
+
   static String _extractMessage(http.Response response, String fallback) {
     try {
       final body = jsonDecode(response.body);
@@ -252,6 +290,47 @@ class AuthService {
       return user;
     }
     return null;
+  }
+
+  /// POST /api/v1/auth/verify/resend — issues a new email verification token
+  /// for the authenticated user and re-sends the verification email
+  /// (best-effort on the backend side). Requires an active session.
+  static Future<void> resendVerificationEmail() async {
+    final token = await getToken();
+    if (token == null) throw AuthException('No hay sesión activa');
+
+    final uri = Uri.parse('$baseUrl/auth/verify/resend');
+    final response = await http.post(
+      uri,
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode != 200) {
+      throw AuthException(
+        _extractMessage(response, 'No se pudo reenviar el correo de verificación'),
+        statusCode: response.statusCode,
+      );
+    }
+  }
+
+  /// POST /api/v1/auth/verify — submits the token/code the user received by
+  /// email and pasted into a text field (profile screen), as an alternative
+  /// to a clickable magic link. Returns true on success (200), false on 400
+  /// (invalid/expired token per GlobalExceptionHandler's IllegalArgumentException
+  /// mapping) so callers can show a precise "invalid or expired code" message.
+  static Future<bool> verifyEmail({required int userId, required String token}) async {
+    final uri = Uri.parse('$baseUrl/auth/verify');
+    final response = await http.post(
+      uri,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'userId': userId, 'token': token}),
+    );
+
+    if (response.statusCode == 200) return true;
+    if (response.statusCode == 400) return false;
+
+    throw AuthException(_extractMessage(response, 'No se pudo verificar el código'),
+        statusCode: response.statusCode);
   }
 
   static Future<void> logout() async {

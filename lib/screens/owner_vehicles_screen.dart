@@ -5,6 +5,7 @@ import '../services/vehicle_service.dart';
 import '../widgets/common_widgets.dart';
 import 'add_vehicle_screen.dart';
 import 'edit_vehicle_screen.dart';
+import 'availability_screen.dart';
 
 class OwnerVehiclesScreen extends StatefulWidget {
   const OwnerVehiclesScreen({super.key});
@@ -16,12 +17,32 @@ class _OwnerVehiclesScreenState extends State<OwnerVehiclesScreen> {
   List<VehicleData> _vehicles = [];
   bool _loading = true;
   String? _errorMsg;
-  int _filter = 0; // 0=Todos 1=Activos 2=Borradores 3=Revisión
+
+  final _scrollController = ScrollController();
+  int _currentPage = 0;
+  bool _hasMorePages = false;
+  bool _isLoadingMore = false;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final threshold = _scrollController.position.maxScrollExtent - 200;
+    if (_scrollController.position.pixels >= threshold) {
+      _loadNextPage();
+    }
   }
 
   Future<void> _load() async {
@@ -30,21 +51,48 @@ class _OwnerVehiclesScreenState extends State<OwnerVehiclesScreen> {
       _errorMsg = null;
     });
     try {
-      final vehicles = await VehicleService.getMyVehicles();
-      if (mounted) setState(() { _vehicles = vehicles; _loading = false; });
+      final paged = await VehicleService.getMyVehiclesPaged(page: 0);
+      if (mounted) {
+        setState(() {
+          _vehicles = paged.content;
+          _loading = false;
+          _currentPage = paged.page;
+          _hasMorePages = paged.hasMorePages;
+        });
+      }
     } catch (e) {
       if (mounted) setState(() { _loading = false; _errorMsg = 'No se pudieron cargar tus vehículos.'; });
     }
   }
 
-  List<VehicleData> get _filtered {
-    if (_filter == 1) return _vehicles.where((v) {
+  /// US75/TS22 — loads the next page and appends results, mirroring Kotlin's
+  /// VehicleListViewModel.loadNextPage: guarded against concurrent in-flight
+  /// requests (_isLoadingMore) and against calling past the last page
+  /// (_hasMorePages), matching Kotlin's `hasMorePages = page < totalPages - 1`.
+  Future<void> _loadNextPage() async {
+    if (!_hasMorePages || _isLoadingMore || _loading) return;
+    setState(() => _isLoadingMore = true);
+    final nextPage = _currentPage + 1;
+    try {
+      final paged = await VehicleService.getMyVehiclesPaged(page: nextPage);
+      if (mounted) {
+        setState(() {
+          _vehicles = [..._vehicles, ...paged.content];
+          _currentPage = paged.page;
+          _hasMorePages = paged.hasMorePages;
+          _isLoadingMore = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoadingMore = false);
+    }
+  }
+
+  List<VehicleData> get _activeVehicles {
+    return _vehicles.where((v) {
       final s = v.status.toUpperCase();
       return s == 'ACTIVE' || s == 'AVAILABLE';
     }).toList();
-    if (_filter == 2) return _vehicles.where((v) => v.status.toUpperCase() == 'DRAFT').toList();
-    if (_filter == 3) return _vehicles.where((v) => v.status.toUpperCase() == 'PENDING_REVIEW').toList();
-    return _vehicles;
   }
 
   Future<void> _goToEdit(VehicleData vehicle) async {
@@ -61,15 +109,75 @@ class _OwnerVehiclesScreenState extends State<OwnerVehiclesScreen> {
     if (created == true) _load();
   }
 
+  Future<void> _goToAvailability(VehicleData vehicle) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => AvailabilityScreen(vehicle: vehicle)),
+    );
+  }
+
+  Future<void> _togglePause(VehicleData vehicle) async {
+    final isActive = vehicle.status.toUpperCase() == 'ACTIVE' ||
+        vehicle.status.toUpperCase() == 'AVAILABLE';
+    final newStatus = isActive ? 'MAINTENANCE' : 'AVAILABLE';
+    try {
+      await VehicleService.updateStatus(vehicle.id, newStatus);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(isActive ? 'Vehículo pausado' : 'Vehículo reactivado')),
+        );
+        _load();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No se pudo actualizar el estado del vehículo.')),
+        );
+      }
+    }
+  }
+
+  Future<void> _confirmDelete(VehicleData vehicle) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Eliminar vehículo'),
+        content: Text('¿Seguro que deseas eliminar "${vehicle.name}"? Esta acción no se puede deshacer.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Eliminar', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await VehicleService.deleteVehicle(vehicle.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Vehículo eliminado')),
+        );
+        _load();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final activeCount = _vehicles.where((v) => v.status.toUpperCase() == 'ACTIVE').length;
-
+    final activeCount = _activeVehicles.length;
     return Scaffold(
-      backgroundColor: const Color(0xFFD9E5E3),
+      backgroundColor: const Color(0xFFF0F4F8),
       body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _load,
+        child: DefaultTabController(
+          length: 2,
           child: Column(
             children: [
               Padding(
@@ -85,7 +193,7 @@ class _OwnerVehiclesScreenState extends State<OwnerVehiclesScreen> {
                           const SizedBox(height: 2),
                           Text(
                             '${_vehicles.length} publicados · $activeCount en alquiler ahora',
-                            style: TextStyle(color: Colors.black54, fontSize: 12),
+                            style: const TextStyle(color: Colors.black54, fontSize: 12),
                           ),
                         ],
                       ),
@@ -102,76 +210,130 @@ class _OwnerVehiclesScreenState extends State<OwnerVehiclesScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Row(
-                  children: ['Todos', 'Activos', 'Borradores', 'Revisión'].asMap().entries.map((e) => Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: GestureDetector(
-                      onTap: () => setState(() => _filter = e.key),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: _filter == e.key ? Colors.black : Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(e.value, style: TextStyle(
-                            fontSize: 13, fontWeight: FontWeight.w600,
-                            color: _filter == e.key ? Colors.white : Colors.grey[600])),
-                      ),
-                    ),
-                  )).toList(),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20),
+                child: TabBar(
+                  labelColor: Colors.white,
+                  unselectedLabelColor: Colors.black54,
+                  indicator: BoxDecoration(
+                    color: Colors.black,
+                    borderRadius: BorderRadius.all(Radius.circular(20)),
+                  ),
+                  dividerColor: Colors.transparent,
+                  indicatorSize: TabBarIndicatorSize.tab,
+                  tabs: [
+                    Tab(text: 'Todos'),
+                    Tab(text: 'Activos'),
+                  ],
                 ),
               ),
               const SizedBox(height: 16),
               Expanded(
-                child: _loading
-                    ? const Center(child: CircularProgressIndicator(color: kCyan))
-                    : _errorMsg != null
-                        ? Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(_errorMsg!, style: TextStyle(color: Colors.grey[600])),
-                                const SizedBox(height: 8),
-                                TextButton(onPressed: _load, child: const Text('Reintentar')),
-                              ],
-                            ),
-                          )
-                        : _filtered.isEmpty
-                            ? Center(
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.directions_car_outlined, size: 48, color: Colors.black26),
-                                    const SizedBox(height: 12),
-                                    Text('Aún no tienes vehículos aquí',
-                                        style: TextStyle(color: Colors.black54)),
-                                    const SizedBox(height: 12),
-                                    ElevatedButton.icon(
-                                      onPressed: _goToAdd,
-                                      icon: const Icon(Icons.add),
-                                      label: const Text('Publicar vehículo'),
-                                      style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.black, foregroundColor: Colors.white),
-                                    ),
-                                  ],
-                                ),
-                              )
-                            : ListView.separated(
-                                padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
-                                itemCount: _filtered.length,
-                                separatorBuilder: (_, __) => const SizedBox(height: 16),
-                                itemBuilder: (_, i) => _VehicleCard(
-                                  vehicle: _filtered[i],
-                                  onTap: () => _goToEdit(_filtered[i]),
-                                ),
-                              ),
+                child: TabBarView(
+                  children: [
+                    _buildVehicleList(
+                      vehicles: _vehicles,
+                      emptyMessage: 'Aún no tienes vehículos aquí',
+                      scrollController: _scrollController,
+                      showLoadMore: true,
+                    ),
+                    _buildVehicleList(
+                      vehicles: _activeVehicles,
+                      emptyMessage: 'No tienes vehículos activos',
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildVehicleList({
+    required List<VehicleData> vehicles,
+    required String emptyMessage,
+    ScrollController? scrollController,
+    bool showLoadMore = false,
+  }) {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator(color: kCyan));
+    }
+
+    if (_errorMsg != null) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(_errorMsg!, style: TextStyle(color: Colors.grey[600])),
+            const SizedBox(height: 8),
+            TextButton(onPressed: _load, child: const Text('Reintentar')),
+          ],
+        ),
+      );
+    }
+
+    if (vehicles.isEmpty) {
+      return RefreshIndicator(
+        onRefresh: _load,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+          children: [
+            const SizedBox(height: 80),
+            Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.directions_car_outlined, size: 48, color: Colors.black26),
+                  const SizedBox(height: 12),
+                  Text(emptyMessage, style: const TextStyle(color: Colors.black54)),
+                  const SizedBox(height: 12),
+                  ElevatedButton.icon(
+                    onPressed: _goToAdd,
+                    icon: const Icon(Icons.add),
+                    label: const Text('Publicar vehículo'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.black,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final showSpinner = showLoadMore && _hasMorePages;
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView.separated(
+        key: showLoadMore ? const Key('owner_vehicle_list') : null,
+        controller: scrollController,
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+        itemCount: vehicles.length + (showSpinner ? 1 : 0),
+        separatorBuilder: (_, __) => const SizedBox(height: 16),
+        itemBuilder: (_, i) {
+          if (i >= vehicles.length) {
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: kCyan)),
+              ),
+            );
+          }
+          return _VehicleCard(
+            vehicle: vehicles[i],
+            onTap: () => _goToEdit(vehicles[i]),
+            onPause: () => _togglePause(vehicles[i]),
+            onDelete: () => _confirmDelete(vehicles[i]),
+            onAvailability: () => _goToAvailability(vehicles[i]),
+          );
+        },
       ),
     );
   }
@@ -180,7 +342,16 @@ class _OwnerVehiclesScreenState extends State<OwnerVehiclesScreen> {
 class _VehicleCard extends StatelessWidget {
   final VehicleData vehicle;
   final VoidCallback onTap;
-  const _VehicleCard({required this.vehicle, required this.onTap});
+  final VoidCallback onPause;
+  final VoidCallback onDelete;
+  final VoidCallback onAvailability;
+  const _VehicleCard({
+    required this.vehicle,
+    required this.onTap,
+    required this.onPause,
+    required this.onDelete,
+    required this.onAvailability,
+  });
 
   bool get _isActive => vehicle.status.toUpperCase() == 'ACTIVE';
   bool get _isAvailable => vehicle.status.toUpperCase() == 'AVAILABLE';
@@ -207,7 +378,7 @@ class _VehicleCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-      decoration: BoxDecoration(color: const Color(0xFFEFF3F1), borderRadius: BorderRadius.circular(18)),
+      decoration: BoxDecoration(color: const Color(0xFFD9E5E3), borderRadius: BorderRadius.circular(18)),
       padding: const EdgeInsets.all(14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -215,7 +386,30 @@ class _VehicleCard extends StatelessWidget {
           Row(children: [
             Container(width: 6, height: 6, decoration: BoxDecoration(color: _statusColor, shape: BoxShape.circle)),
             const SizedBox(width: 6),
-            Text(_statusLabel, style: TextStyle(color: Colors.black54, fontSize: 12)),
+            Expanded(child: Text(_statusLabel, style: const TextStyle(color: Colors.black54, fontSize: 12))),
+            PopupMenuButton<String>(
+              key: Key('vehicle_actions_menu_${vehicle.id}'),
+              icon: const Icon(Icons.more_vert, size: 20, color: Colors.black54),
+              onSelected: (value) {
+                if (value == 'pause') onPause();
+                if (value == 'delete') onDelete();
+                if (value == 'availability') onAvailability();
+              },
+              itemBuilder: (_) => [
+                PopupMenuItem(
+                  value: 'pause',
+                  child: Text(_isActive || _isAvailable ? 'Pausar' : 'Reactivar'),
+                ),
+                const PopupMenuItem(
+                  value: 'availability',
+                  child: Text('Disponibilidad'),
+                ),
+                const PopupMenuItem(
+                  value: 'delete',
+                  child: Text('Eliminar', style: TextStyle(color: Colors.red)),
+                ),
+              ],
+            ),
           ]),
           const SizedBox(height: 10),
           ClipRRect(
@@ -234,7 +428,7 @@ class _VehicleCard extends StatelessWidget {
                   ),
           ),
           const SizedBox(height: 12),
-          Row(
+          /* Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
@@ -242,7 +436,7 @@ class _VehicleCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(vehicle.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black)),
-                    Text(vehicle.licensePlate, style: TextStyle(color: Colors.black54, fontSize: 12)),
+                    Text(vehicle.licensePlate, style: const TextStyle(color: Colors.black54, fontSize: 12)),
                   ],
                 ),
               ),
@@ -250,7 +444,7 @@ class _VehicleCard extends StatelessWidget {
               const SizedBox(width: 2),
               const Text('—', style: TextStyle(fontWeight: FontWeight.bold)),
             ],
-          ),
+          ), */
           const SizedBox(height: 14),
           Row(
             children: [
@@ -258,7 +452,7 @@ class _VehicleCard extends StatelessWidget {
               Container(width: 1, height: 30, color: Colors.black12),
               Expanded(child: _StatChip(value: '${vehicle.seats ?? '—'}', label: 'Asientos')),
               Container(width: 1, height: 30, color: Colors.black12),
-              Expanded(child: _StatChip(value: '${vehicle.dailyPrice.toStringAsFixed(0)} €', label: '/día')),
+              Expanded(child: _StatChip(value: '${vehicle.dailyPrice.toStringAsFixed(0)} S/', label: '/día')),
             ],
           ),
           const SizedBox(height: 10),
@@ -268,12 +462,12 @@ class _VehicleCard extends StatelessWidget {
               Row(children: [
                 const Icon(Icons.local_gas_station_outlined, size: 13, color: Colors.black45),
                 const SizedBox(width: 4),
-                Text(vehicle.fuelType ?? '—', style: TextStyle(color: Colors.black45, fontSize: 11)),
+                Text(vehicle.fuelType ?? '—', style: const TextStyle(color: Colors.black45, fontSize: 11)),
               ]),
               Row(children: [
                 const Icon(Icons.settings_outlined, size: 13, color: Colors.black45),
                 const SizedBox(width: 4),
-                Text(vehicle.transmission ?? '—', style: TextStyle(color: Colors.black45, fontSize: 11)),
+                Text(vehicle.transmission ?? '—', style: const TextStyle(color: Colors.black45, fontSize: 11)),
               ]),
             ],
           ),
@@ -291,7 +485,7 @@ class _StatChip extends StatelessWidget {
   Widget build(BuildContext context) => Column(
     children: [
       Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black)),
-      Text(label, style: TextStyle(color: Colors.black45, fontSize: 11)),
+      Text(label, style: const TextStyle(color: Colors.black45, fontSize: 11)),
     ],
   );
 }

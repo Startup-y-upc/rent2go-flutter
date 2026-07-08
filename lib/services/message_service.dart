@@ -7,9 +7,30 @@ import 'auth_service.dart';
 class MessageService {
   static const String baseUrl = 'https://rent2go-backend-production.up.railway.app/api/v1';
 
+  // In-flight request de-duplication for getUserConversations. A single
+  // screen (e.g. MessagesScreen) and the BottomNavBar it renders both need
+  // the same conversations list at mount time — one to populate the list,
+  // the other to compute the activity dot via hasRecentActivity(). Without
+  // this, both callers fire the GET .../conversations request concurrently.
+  // Keying by userId and reusing the in-flight Future (cleared once it
+  // settles) collapses concurrent callers into a single HTTP request while
+  // still returning fresh data on every call that isn't overlapping one.
+  static final Map<int, Future<List<ConversationData>>> _inFlightConversations = {};
+
   /// GET /api/v1/community-trust/users/{userId}/conversations
   /// Lista todas las conversaciones reales del usuario actual (como owner o renter).
-  static Future<List<ConversationData>> getUserConversations(int userId) async {
+  static Future<List<ConversationData>> getUserConversations(int userId) {
+    final existing = _inFlightConversations[userId];
+    if (existing != null) return existing;
+
+    final request = _fetchUserConversations(userId).whenComplete(() {
+      _inFlightConversations.remove(userId);
+    });
+    _inFlightConversations[userId] = request;
+    return request;
+  }
+
+  static Future<List<ConversationData>> _fetchUserConversations(int userId) async {
     final token = await AuthService.getToken();
     final uri = Uri.parse('$baseUrl/community-trust/users/$userId/conversations');
     final response = await http.get(
@@ -109,5 +130,57 @@ class MessageService {
       uri,
       headers: {if (token != null) 'Authorization': 'Bearer $token'},
     );
+  }
+
+  /// Whether [userId] has any conversation with activity newer than the last
+  /// time they opened the Messages screen. Replaces the old N+1 unread-count
+  /// logic (one GET .../messages call per conversation just to count unread
+  /// items client-side): the conversations list endpoint already returns
+  /// `lastMessageAt` for free, so this only needs the single list call plus a
+  /// local timestamp comparison — no per-conversation message fetch, no
+  /// numeric count, just "is there something new". When this runs at the same
+  /// time as MessagesScreen/OwnerMessagesScreen's own load (e.g. both mount
+  /// together on app start), [getUserConversations]'s in-flight
+  /// de-duplication ensures only one HTTP request actually goes out.
+  static Future<bool> hasRecentActivity(int userId) async {
+    try {
+      final conversations = await getUserConversations(userId);
+      final lastOpened = await UnreadIndicatorStore.getLastOpenedAt(userId);
+      if (lastOpened == null) {
+        // Never opened Messages before: show the dot if any conversation has
+        // ever had a message, otherwise there is nothing new to flag.
+        return conversations.any((c) => c.lastMessageAt != null && c.lastMessageAt!.isNotEmpty);
+      }
+      for (final c in conversations) {
+        final iso = c.lastMessageAt;
+        if (iso == null || iso.isEmpty) continue;
+        final ts = DateTime.tryParse(iso);
+        if (ts != null && ts.isAfter(lastOpened)) return true;
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+}
+
+/// Persists, per user, the last time the Messages screen was opened so the
+/// unread activity dot can be derived from `ConversationData.lastMessageAt`
+/// without any additional network call.
+class UnreadIndicatorStore {
+  static const _boxName = 'messages_unread_indicator';
+
+  static Future<Box> _box() => Hive.openBox(_boxName);
+
+  static Future<DateTime?> getLastOpenedAt(int userId) async {
+    final box = await _box();
+    final iso = box.get('last_opened_$userId') as String?;
+    if (iso == null) return null;
+    return DateTime.tryParse(iso);
+  }
+
+  static Future<void> markOpenedNow(int userId) async {
+    final box = await _box();
+    await box.put('last_opened_$userId', DateTime.now().toUtc().toIso8601String());
   }
 }

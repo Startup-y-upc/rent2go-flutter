@@ -83,3 +83,56 @@ class VehicleCategory {
     return VehicleCategory(id: json['id'] as int, name: json['name'] ?? '');
   }
 }
+
+/// Feature/amenidad de vehículo (GET /api/v1/features). Solo se consume aquí
+/// para poblar la selección múltiple del formulario de vehículo — no hay UI
+/// de administración de catálogo (crear/editar/eliminar features) en Flutter.
+class VehicleFeature {
+  final int id;
+  final String name;
+  const VehicleFeature({required this.id, required this.name});
+
+  factory VehicleFeature.fromJson(Map<String, dynamic> json) {
+    return VehicleFeature(
+      id: json['id'] as int,
+      name: json['name'] ?? '',
+    );
+  }
+}
+
+/// Sprint 5 (US75/TS22) — full `PagedResponse` projection (content/page/size/
+/// totalElements/totalPages), mirroring Kotlin's `PagedVehicleResponse` /
+/// `VehicleListState` pagination fields (currentPage/totalPages/hasMorePages).
+/// Backend contract shape is unchanged (`VehicleController.toPagedResponse`);
+/// previously the Flutter client only read `content` and silently discarded
+/// page/totalPages, making "load more" impossible.
+class PagedVehicles {
+  final List<VehicleData> content;
+  final int page;
+  final int size;
+  final int totalElements;
+  final int totalPages;
+
+  const PagedVehicles({
+    required this.content,
+    required this.page,
+    required this.size,
+    required this.totalElements,
+    required this.totalPages,
+  });
+
+  bool get hasMorePages => page < totalPages - 1;
+
+  factory PagedVehicles.fromJson(Map<String, dynamic> json) {
+    final content = (json['content'] as List? ?? [])
+        .map((v) => VehicleData.fromJson(v as Map<String, dynamic>))
+        .toList();
+    return PagedVehicles(
+      content: content,
+      page: json['page'] as int? ?? 0,
+      size: json['size'] as int? ?? content.length,
+      totalElements: json['totalElements'] as int? ?? content.length,
+      totalPages: json['totalPages'] as int? ?? 1,
+    );
+  }
+}

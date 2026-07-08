@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../models/message_models.dart';
 import '../services/message_service.dart';
 import '../services/auth_service.dart';
@@ -13,6 +14,8 @@ class ChatScreen extends StatefulWidget {
   final int? vehicleId;
   final int? reservationId;
 
+  final String? counterpartyPhotoUrl;
+
   const ChatScreen({
     super.key,
     required this.name,
@@ -22,6 +25,7 @@ class ChatScreen extends StatefulWidget {
     required this.renterId,
     this.vehicleId,
     this.reservationId,
+    this.counterpartyPhotoUrl,
   });
 
   @override
@@ -148,6 +152,26 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  /// US71 — date separator label ("Hoy"/"Ayer"/fecha), matching Kotlin's
+  /// ChatDetailScreen.kt date-header convention on the same message stream.
+  String _dateSeparatorLabel(DateTime dt) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final that = DateTime(dt.year, dt.month, dt.day);
+    final diff = today.difference(that).inDays;
+    if (diff == 0) return 'Hoy';
+    if (diff == 1) return 'Ayer';
+    return '${that.day.toString().padLeft(2, '0')}/${that.month.toString().padLeft(2, '0')}/${that.year}';
+  }
+
+  DateTime? _parseCreatedAt(String iso) {
+    try {
+      return DateTime.parse(iso).toLocal();
+    } catch (_) {
+      return null;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -163,12 +187,19 @@ class _ChatScreenState extends State<ChatScreen> {
           children: [
             Stack(
               children: [
-                CircleAvatar(
-                  radius: 18,
-                  backgroundColor: Colors.grey.shade200,
-                  child: Text(widget.name.isNotEmpty ? widget.name[0] : '?',
-                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black54)),
-                ),
+                (widget.counterpartyPhotoUrl != null && widget.counterpartyPhotoUrl!.isNotEmpty)
+                    ? CircleAvatar(
+                        radius: 18,
+                        backgroundColor: Colors.grey.shade200,
+                        backgroundImage: CachedNetworkImageProvider(widget.counterpartyPhotoUrl!),
+                        onBackgroundImageError: (_, __) {},
+                      )
+                    : CircleAvatar(
+                        radius: 18,
+                        backgroundColor: Colors.grey.shade200,
+                        child: Text(widget.name.isNotEmpty ? widget.name[0] : '?',
+                            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black54)),
+                      ),
                 if (widget.isOnline)
                   Positioned(
                     bottom: 0, right: 0,
@@ -220,16 +251,41 @@ class _ChatScreenState extends State<ChatScreen> {
                                 style: TextStyle(color: Colors.grey[400], fontSize: 13)),
                           )
                         : ListView.builder(
+                            key: const Key('chat_message_list'),
                             controller: _scrollCtrl,
                             padding: const EdgeInsets.all(16),
                             itemCount: _messages.length,
                             itemBuilder: (_, i) {
                               final msg = _messages[i];
                               final isMe = msg.senderId == _myUserId;
-                              return _BubbleMsg(
-                                text: msg.content,
-                                isMe: isMe,
-                                time: _formatTime(msg.createdAt),
+                              final dt = _parseCreatedAt(msg.createdAt);
+                              // US71 — date separator whenever the day changes between
+                              // consecutive messages (or before the very first message).
+                              final prevDt = i > 0 ? _parseCreatedAt(_messages[i - 1].createdAt) : null;
+                              final showSeparator = dt != null &&
+                                  (prevDt == null ||
+                                      dt.year != prevDt.year || dt.month != prevDt.month || dt.day != prevDt.day);
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  if (showSeparator)
+                                    Padding(
+                                      key: Key('chat_date_separator_$i'),
+                                      padding: const EdgeInsets.symmetric(vertical: 10),
+                                      child: Center(
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                          decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(12)),
+                                          child: Text(_dateSeparatorLabel(dt), style: TextStyle(fontSize: 11, color: Colors.grey[700], fontWeight: FontWeight.w600)),
+                                        ),
+                                      ),
+                                    ),
+                                  _BubbleMsg(
+                                    text: msg.content,
+                                    isMe: isMe,
+                                    time: _formatTime(msg.createdAt),
+                                  ),
+                                ],
                               );
                             },
                           ),
@@ -242,6 +298,45 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
             child: Row(
               children: [
+                GestureDetector(
+                  onTap: () {
+                    showModalBottomSheet(
+                      context: context,
+                      builder: (context) => SafeArea(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            ListTile(
+                              leading: const Icon(Icons.image),
+                              title: const Text('Enviar imagen'),
+                              onTap: () => Navigator.pop(context),
+                            ),
+                            ListTile(
+                              leading: const Icon(Icons.location_on),
+                              title: const Text('Compartir ubicación'),
+                              onTap: () => Navigator.pop(context),
+                            ),
+                            ListTile(
+                              leading: const Icon(Icons.insert_drive_file),
+                              title: const Text('Enviar documento'),
+                              onTap: () => Navigator.pop(context),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: const Icon(Icons.add, color: Colors.grey, size: 20),
+                  ),
+                ),
+                const SizedBox(width: 10),
                 Expanded(
                   child: TextField(
                     controller: _msgCtrl,
@@ -301,7 +396,7 @@ class _BubbleMsg extends StatelessWidget {
             bottomLeft: Radius.circular(isMe ? 16 : 4),
             bottomRight: Radius.circular(isMe ? 4 : 16),
           ),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, offset: const Offset(0, 2))],
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 4, offset: const Offset(0, 2))],
         ),
         child: Column(
           crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,

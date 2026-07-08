@@ -1,0 +1,80 @@
+# Términos y Condiciones — Rent2Go
+
+**Última actualización:** 2026-07-02
+
+---
+
+## 1. Aceptación de los Términos
+
+Al acceder o utilizar la plataforma Rent2Go, usted acepta quedar vinculado por estos Términos y Condiciones. Si no está de acuerdo con alguna parte de estos Términos, no debe utilizar la Plataforma.
+
+## 2. Jurisdicción y Ley Aplicable
+
+Estos Términos se rigen por las leyes de **Perú**. Cualquier controversia derivada del uso de la Plataforma se someterá a los tribunales competentes de la ciudad de Lima, Perú, sin perjuicio de las normas de protección al consumidor aplicables (Ley N.º 29571, Código de Protección y Defensa del Consumidor).
+
+## 3. Cuentas de Usuario
+
+- Para acceder a determinadas funciones de la Plataforma (reservar vehículos, publicar vehículos en arriendo, contactar a otros usuarios), es necesario crear una cuenta.
+- El usuario puede seleccionar un tipo de cuenta (arrendatario, propietario, o ambos) durante el registro.
+- El usuario es responsable de mantener la confidencialidad de sus credenciales y de toda actividad realizada bajo su cuenta.
+- Rent2Go puede solicitar documentos de verificación de identidad (KYC) como parte del proceso de validación de cuenta, especialmente para usuarios que deseen operar como propietarios de vehículos.
+
+## 4. Contenido Generado por el Usuario y Carga de Archivos
+
+- La Plataforma permite a los usuarios cargar contenido, incluyendo pero no limitado a: fotografías de vehículos, documentos de identidad/KYC, y fotografías de perfil.
+- El usuario declara y garantiza que posee los derechos necesarios sobre todo contenido que cargue y que dicho contenido no infringe derechos de terceros ni normativa aplicable.
+- Rent2Go se reserva el derecho de remover contenido que incumpla estos Términos o que sea reportado como inapropiado, fraudulento o ilegal.
+
+## 5. Pagos
+
+- Los pagos en la Plataforma corresponden a **pagos únicos** por concepto de reservas de alquiler de vehículos.
+- Rent2Go **no ofrece planes de suscripción ni membresías recurrentes** de ningún tipo.
+- El procesamiento de pagos se realiza a través de un proveedor externo de pagos. Rent2Go no almacena datos completos de tarjetas de pago.
+- Las políticas de cancelación y reembolso aplicables a cada reserva se muestran al momento de la reserva.
+
+## 6. Propiedad Intelectual
+
+Rent2Go, su logotipo, diseño visual, marca y todos los elementos de propiedad intelectual asociados a la Plataforma son propiedad exclusiva de Rent2Go o de sus licenciantes. Queda prohibido el uso, reproducción o distribución no autorizada de dichos elementos sin consentimiento previo y por escrito.
+
+## 7. Uso de Comentarios y Sugerencias (Feedback)
+
+Si el usuario proporciona comentarios, sugerencias o ideas sobre la Plataforma, Rent2Go podrá utilizar, modificar y/o incorporar dicho feedback sin restricción y sin obligación de compensación alguna hacia el usuario que lo proporcionó.
+
+## 8. Promociones y Concursos
+
+Rent2Go podrá ofrecer promociones, códigos de descuento, concursos o sorteos de forma periódica. Cada promoción se regirá por sus propias reglas específicas, las cuales se comunicarán en el momento en que la promoción esté activa. La participación en promociones implica la aceptación de sus reglas particulares, adicionales a estos Términos.
+
+## 9. Limitación de Responsabilidad
+
+En la máxima medida permitida por la ley peruana, Rent2Go no será responsable por daños indirectos, incidentales o consecuentes derivados del uso de la Plataforma, incluyendo pero no limitado a disputas entre arrendatarios y propietarios de vehículos, condición mecánica de los vehículos ofrecidos por terceros propietarios, o interrupciones del servicio.
+
+## 10. Modificaciones a los Términos
+
+Rent2Go podrá actualizar estos Términos periódicamente. La fecha de "Última actualización" al inicio de este documento reflejará la versión vigente. El uso continuado de la Plataforma tras una actualización constituye la aceptación de los Términos modificados.
+
+## 11. Contacto
+
+Para consultas relacionadas con estos Términos y Condiciones, puede contactarnos a través de:
+
+- **Correo electrónico:** info@rent2go.pe
+- **Página web:** sección de contacto en el sitio web oficial de Rent2Go — [https://startup-y-upc.github.io/landing-page/#contact](https://startup-y-upc.github.io/landing-page/#contact)
+
+## 12. Planes de Cobertura durante el Alquiler
+
+- Al momento de reservar un vehículo, el arrendatario puede contratar un **plan de cobertura** (Sin cobertura, Básica, Estándar o Premium). El plan de cobertura **no constituye el seguro integral del vehículo**: es una protección **adicional y opcional** que se contrata junto con la reserva, aplicable únicamente durante el período específico del alquiler.
+- El costo del plan de cobertura elegido se cobra como un monto adicional por día, sumado al precio del alquiler del vehículo, y se muestra de forma desglosada antes de confirmar la reserva.
+- En caso de accidente, pérdida o robo durante el alquiler, el plan contratado determina el **deducible** que asume el arrendatario (la porción del daño que paga de su bolsillo) y qué costos son asumidos por la aseguradora o por la Plataforma. Cuanto mayor sea el nivel del plan, menor es el deducible a cargo del arrendatario.
+- Si el arrendatario no contrata ningún plan de cobertura (opción "Sin cobertura"), asume el 100% de la responsabilidad económica por cualquier daño, pérdida o robo ocurrido durante el alquiler.
+- Para el propietario del vehículo, la contratación de un plan de cobertura por parte del arrendatario reduce su riesgo financiero al prestar el vehículo: los costos de reparación de incidentes cubiertos son asumidos por la aseguradora o la Plataforma según el plan contratado, en lugar de requerir un reclamo directo del propietario al arrendatario por el monto total.
+- Los montos exactos de deducible y precio por día de cada plan se muestran en la pantalla de reserva y pueden variar según la configuración vigente de la Plataforma.
+
+## 13. Redes Sociales
+
+Rent2Go mantiene presencia oficial en los siguientes canales, enlazados desde el pie de página del sitio web:
+
+- **Facebook:** [facebook.com/rent2go.pe](https://facebook.com/rent2go.pe)
+- **Instagram:** [instagram.com/rent2go.pe](https://instagram.com/rent2go.pe)
+- **Twitter/X:** [x.com/rent2go_pe](https://x.com/rent2go_pe)
+- **WhatsApp Business:** [wa.me/51987654321](https://wa.me/51987654321)
+
+Estos canales son medios de difusión y soporte al cliente; no constituyen un medio válido para el envío de comunicaciones legales formales, para lo cual debe utilizarse el correo electrónico indicado en la Sección 11.

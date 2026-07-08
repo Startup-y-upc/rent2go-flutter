@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../models/message_models.dart';
 import '../services/auth_service.dart';
 import '../services/message_service.dart';
@@ -11,7 +12,7 @@ class OwnerMessagesScreen extends StatefulWidget {
 }
 
 class _OwnerMessagesScreenState extends State<OwnerMessagesScreen> {
-  int _filter = 0; // 0=Todos 1=Activos 2=Sin leer
+  int _filter = 0; // 0=Todos 1=Activos
   List<ConversationData> _conversations = [];
   int? _myUserId;
   bool _loading = true;
@@ -38,6 +39,9 @@ class _OwnerMessagesScreenState extends State<OwnerMessagesScreen> {
       final convs = await MessageService.getUserConversations(_myUserId!);
       convs.sort((a, b) => (b.lastMessageAt ?? b.createdAt).compareTo(a.lastMessageAt ?? a.createdAt));
       if (mounted) setState(() { _conversations = convs; _loading = false; });
+      // Entering the Messages screen means the user has now seen the latest
+      // activity — record it so the nav-bar dot clears without any extra call.
+      await UnreadIndicatorStore.markOpenedNow(_myUserId!);
     } catch (e) {
       if (mounted) setState(() { _loading = false; _errorMsg = 'No se pudieron cargar tus mensajes.'; });
     }
@@ -45,21 +49,22 @@ class _OwnerMessagesScreenState extends State<OwnerMessagesScreen> {
 
   List<ConversationData> get _filtered {
     if (_filter == 1) return _conversations.where((c) => c.status.toUpperCase() == 'OPEN' || c.status.toUpperCase() == 'ACTIVE').toList();
-    if (_filter == 2) return _conversations;
     return _conversations;
   }
 
   void _openChat(ConversationData c) {
     if (_myUserId == null) return;
     final iAmOwner = c.ownerId == _myUserId;
+    final other = iAmOwner ? c.renter : c.owner;
     context.push('/chat', extra: {
-      'name': iAmOwner ? 'Arrendatario #${c.renterId}' : 'Propietario #${c.ownerId}',
+      'name': iAmOwner ? c.renterDisplayName : c.ownerDisplayName,
       'car': c.subject,
       'isOnline': false,
       'ownerId': c.ownerId,
       'renterId': c.renterId,
       'vehicleId': c.vehicleId,
       'reservationId': c.reservationId,
+      'counterpartyPhotoUrl': other?.profileImageUrl,
     });
   }
 
@@ -80,9 +85,10 @@ class _OwnerMessagesScreenState extends State<OwnerMessagesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFFF0F4F8),
       body: SafeArea(
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
@@ -98,7 +104,7 @@ class _OwnerMessagesScreenState extends State<OwnerMessagesScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Row(
-                children: ['Todos', 'Activos', 'Sin leer'].asMap().entries.map((e) => Padding(
+                children: ['Todos', 'Activos'].asMap().entries.map((e) => Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: GestureDetector(
                     onTap: () => setState(() => _filter = e.key),
@@ -141,18 +147,27 @@ class _OwnerMessagesScreenState extends State<OwnerMessagesScreen> {
                                 itemBuilder: (_, i) {
                                   final c = _filtered[i];
                                   final iAmOwner = c.ownerId == _myUserId;
-                                  final otherLabel = iAmOwner ? 'Arrendatario #${c.renterId}' : 'Propietario #${c.ownerId}';
+                                  final otherLabel = iAmOwner ? c.renterDisplayName : c.ownerDisplayName;
+                                  final otherPhoto = (iAmOwner ? c.renter : c.owner)?.profileImageUrl;
                                   return ListTile(
+                                    key: Key('conversation_tile_${c.id}'),
                                     contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                                    leading: CircleAvatar(
-                                      radius: 24,
-                                      backgroundColor: Colors.grey.shade200,
-                                      child: Text(otherLabel[0], style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black54, fontSize: 18)),
-                                    ),
+                                    leading: (otherPhoto != null && otherPhoto.isNotEmpty)
+                                        ? CircleAvatar(
+                                            radius: 24,
+                                            backgroundColor: Colors.grey.shade200,
+                                            backgroundImage: CachedNetworkImageProvider(otherPhoto),
+                                            onBackgroundImageError: (_, __) {},
+                                          )
+                                        : CircleAvatar(
+                                            radius: 24,
+                                            backgroundColor: Colors.grey.shade200,
+                                            child: Text(otherLabel[0], style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black54, fontSize: 18)),
+                                          ),
                                     title: Row(
                                       children: [
                                         Expanded(child: Text(otherLabel, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: Colors.black), overflow: TextOverflow.ellipsis)),
-                                        Text(_formatTime(c.lastMessageAt ?? c.createdAt), style: TextStyle(fontSize: 12, color: Colors.grey)),
+                                        Text(_formatTime(c.lastMessageAt ?? c.createdAt), style: const TextStyle(fontSize: 12, color: Colors.grey)),
                                       ],
                                     ),
                                     subtitle: Column(

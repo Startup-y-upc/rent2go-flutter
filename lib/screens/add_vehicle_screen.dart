@@ -1,10 +1,12 @@
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:latlong2/latlong.dart';
 import '../models/vehicle_models.dart';
+import '../services/feature_service.dart';
 import '../services/vehicle_service.dart';
 import '../widgets/common_widgets.dart';
+import 'location_picker_screen.dart';
 
 class AddVehicleScreen extends StatefulWidget {
   const AddVehicleScreen({super.key});
@@ -34,6 +36,22 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
   String? _imageFilename;
   final _picker = ImagePicker();
 
+  // US65 — required map-picked location; no manual lat/lon fields.
+  LatLng? _pickedLocation;
+
+  // Features/amenidades — GET /api/v1/features para el catálogo completo;
+  // ninguna preseleccionada por defecto en modo creación.
+  List<VehicleFeature> _availableFeatures = [];
+  final Set<String> _selectedFeatureNames = {};
+  bool _loadingFeatures = true;
+
+  // Características nuevas escritas por el usuario que no existen en el
+  // catálogo (_availableFeatures). No se crean en el backend por separado:
+  // quedan en memoria y se envían junto con las seleccionadas del catálogo
+  // en el mismo payload de creación del vehículo (featureNames).
+  final List<String> _newFeatureNames = [];
+  final _newFeatureCtrl = TextEditingController();
+
   bool _loadingCategories = true;
   bool _saving = false;
   String? _errorMsg;
@@ -45,11 +63,52 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
   void initState() {
     super.initState();
     _loadCategories();
+    _loadFeatures();
   }
 
   Future<void> _loadCategories() async {
     final cats = await VehicleService.getCategories();
     if (mounted) setState(() { _categories = cats; _loadingCategories = false; });
+  }
+
+  Future<void> _loadFeatures() async {
+    final features = await FeatureService.getFeatures();
+    if (mounted) setState(() { _availableFeatures = features; _loadingFeatures = false; });
+  }
+
+  /// Agrega una característica nueva a la lista local en memoria (sin llamar
+  /// a ningún endpoint). Si ya existe una con el mismo nombre (comparación
+  /// case-insensitive) en el catálogo o entre las ya agregadas localmente,
+  /// simplemente la selecciona en vez de agregar un duplicado. El nombre se
+  /// envía recién al guardar el vehículo, junto con los features del
+  /// catálogo seleccionados.
+  void _addNewFeature() {
+    final name = _newFeatureCtrl.text.trim();
+    if (name.isEmpty) return;
+
+    final matches = _availableFeatures.where(
+      (f) => f.name.toLowerCase() == name.toLowerCase(),
+    );
+    if (matches.isNotEmpty) {
+      setState(() {
+        _selectedFeatureNames.add(matches.first.name);
+        _newFeatureCtrl.clear();
+      });
+      return;
+    }
+
+    final alreadyAddedLocally = _newFeatureNames.any(
+      (n) => n.toLowerCase() == name.toLowerCase(),
+    );
+    if (alreadyAddedLocally) {
+      setState(() => _newFeatureCtrl.clear());
+      return;
+    }
+
+    setState(() {
+      _newFeatureNames.add(name);
+      _newFeatureCtrl.clear();
+    });
   }
 
   Future<void> _pickImage() async {
@@ -60,6 +119,16 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
       _imageBytes = bytes;
       _imageFilename = img.name;
     });
+  }
+
+  Future<void> _openLocationPicker() async {
+    final picked = await showLocationPicker(context, initialLocation: _pickedLocation);
+    if (picked != null) {
+      setState(() {
+        _pickedLocation = picked;
+        _errorMsg = null;
+      });
+    }
   }
 
   Future<void> _submit() async {
@@ -78,6 +147,12 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
     }
     if (_fuelType == null) {
       setState(() => _errorMsg = 'Selecciona el tipo de combustible');
+      return;
+    }
+    // US65 — a real map-picked location is required, mirroring the existing
+    // category/transmission/fuel required-field validation pattern above.
+    if (_pickedLocation == null) {
+      setState(() => _errorMsg = 'Marca la ubicación del vehículo en el mapa');
       return;
     }
 
@@ -100,6 +175,9 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
         seats: _seatsCtrl.text.trim().isNotEmpty ? int.parse(_seatsCtrl.text.trim()) : null,
         transmission: _transmission!,
         fuelType: _fuelType!,
+        latitude: _pickedLocation!.latitude,
+        longitude: _pickedLocation!.longitude,
+        featureNames: {..._selectedFeatureNames, ..._newFeatureNames}.toList(),
         imageBytes: _imageBytes!,
         imageFilename: _imageFilename ?? 'vehicle.jpg',
       );
@@ -129,6 +207,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
     _locationCtrl.dispose();
     _descCtrl.dispose();
     _seatsCtrl.dispose();
+    _newFeatureCtrl.dispose();
     super.dispose();
   }
 
@@ -187,7 +266,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(color: Colors.red.withOpacity(0.08), borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.redAccent.withOpacity(0.3))),
+                decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3))),
                 child: Text(_errorMsg!, style: const TextStyle(color: Colors.redAccent, fontSize: 13)),
               ),
             ],
@@ -221,11 +300,41 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
             _Field(label: 'VIN', controller: _vinCtrl, hint: 'Número de chasis'),
             const SizedBox(height: 14),
             _Field(
-              label: 'Precio por día (€)', controller: _priceCtrl, hint: '49',
+              label: 'Precio por día (S/)', controller: _priceCtrl, hint: '49',
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
             ),
             const SizedBox(height: 14),
-            _Field(label: 'Ubicación', controller: _locationCtrl, hint: 'Madrid, España'),
+            _Field(label: 'Ubicación', controller: _locationCtrl, hint: 'Miraflores, Lima'),
+            const SizedBox(height: 14),
+
+            const Text('Ubicación exacta en el mapa *', style: TextStyle(color: Colors.black54, fontSize: 12)),
+            const SizedBox(height: 6),
+            GestureDetector(
+              onTap: _openLocationPicker,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: _pickedLocation == null ? Colors.grey.shade300 : kCyan),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.map_outlined, color: _pickedLocation == null ? Colors.grey[500] : kCyan),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _pickedLocation == null
+                            ? 'Toca para marcar la ubicación en el mapa (obligatorio)'
+                            : 'Ubicación marcada: ${_pickedLocation!.latitude.toStringAsFixed(5)}, ${_pickedLocation!.longitude.toStringAsFixed(5)}',
+                        style: TextStyle(color: _pickedLocation == null ? Colors.grey[500] : Colors.black87, fontSize: 13),
+                      ),
+                    ),
+                    Icon(Icons.chevron_right, color: Colors.grey[400]),
+                  ],
+                ),
+              ),
+            ),
             const SizedBox(height: 14),
 
             // Categoría
@@ -234,7 +343,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
             _loadingCategories
                 ? const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: LinearProgressIndicator())
                 : DropdownButtonFormField<int>(
-                    value: _categoryId,
+                    initialValue: _categoryId,
                     items: _categories.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name))).toList(),
                     onChanged: (v) => setState(() => _categoryId = v),
                     decoration: _dropdownDecoration(),
@@ -249,7 +358,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
                     const Text('Transmisión', style: TextStyle(color: Colors.black54, fontSize: 12)),
                     const SizedBox(height: 6),
                     DropdownButtonFormField<String>(
-                      value: _transmission,
+                      initialValue: _transmission,
                       items: _transmissions.map((t) => DropdownMenuItem(value: t, child: Text(t == 'MANUAL' ? 'Manual' : 'Automática'))).toList(),
                       onChanged: (v) => setState(() => _transmission = v),
                       decoration: _dropdownDecoration(),
@@ -265,7 +374,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
                     const Text('Combustible', style: TextStyle(color: Colors.black54, fontSize: 12)),
                     const SizedBox(height: 6),
                     DropdownButtonFormField<String>(
-                      value: _fuelType,
+                      initialValue: _fuelType,
                       items: _fuelTypes.map((f) => DropdownMenuItem(value: f, child: Text(_fuelLabel(f)))).toList(),
                       onChanged: (v) => setState(() => _fuelType = v),
                       decoration: _dropdownDecoration(),
@@ -290,6 +399,93 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: Colors.grey.shade300)),
                 enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: Colors.grey.shade300)),
               ),
+            ),
+            const SizedBox(height: 20),
+
+            const Text('Características', style: TextStyle(color: Colors.black54, fontSize: 12)),
+            const SizedBox(height: 6),
+            _loadingFeatures
+                ? const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: LinearProgressIndicator())
+                : _availableFeatures.isEmpty
+                    ? Text('No hay features disponibles', style: TextStyle(color: Colors.grey[500], fontSize: 13))
+                    : Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: _availableFeatures.map((f) {
+                          final selected = _selectedFeatureNames.contains(f.name);
+                          return FilterChip(
+                            label: Text(f.name),
+                            selected: selected,
+                            selectedColor: kCyan,
+                            checkmarkColor: Colors.black,
+                            labelStyle: const TextStyle(color: Colors.black87, fontSize: 13),
+                            backgroundColor: Colors.white,
+                            side: BorderSide(color: Colors.grey.shade300),
+                            onSelected: (val) => setState(() {
+                              if (val) {
+                                _selectedFeatureNames.add(f.name);
+                              } else {
+                                _selectedFeatureNames.remove(f.name);
+                              }
+                            }),
+                          );
+                        }).toList(),
+                      ),
+            if (_newFeatureNames.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _newFeatureNames.map((name) {
+                  return FilterChip(
+                    label: Text(name),
+                    selected: true,
+                    selectedColor: kCyan.withValues(alpha: 0.2),
+                    checkmarkColor: Colors.black,
+                    labelStyle: const TextStyle(color: Colors.black87, fontSize: 13),
+                    backgroundColor: Colors.white,
+                    side: BorderSide(color: Colors.grey.shade300),
+                    onSelected: (_) => setState(() => _newFeatureNames.remove(name)),
+                  );
+                }).toList(),
+              ),
+            ],
+            const SizedBox(height: 10),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _newFeatureCtrl,
+                    style: const TextStyle(color: Colors.black, fontSize: 14),
+                    decoration: InputDecoration(
+                      hintText: 'Agregar otra característica...',
+                      isDense: true,
+                      filled: true,
+                      fillColor: Colors.white,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: Colors.grey.shade300)),
+                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: Colors.grey.shade300)),
+                    ),
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => _addNewFeature(),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  height: 44,
+                  child: ElevatedButton(
+                    onPressed: _addNewFeature,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.black,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                    ),
+                    child: const Icon(Icons.add, size: 20),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 28),
 
@@ -354,7 +550,7 @@ class _Field extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: TextStyle(color: Colors.black54, fontSize: 12)),
+        Text(label, style: const TextStyle(color: Colors.black54, fontSize: 12)),
         const SizedBox(height: 6),
         TextFormField(
           controller: controller,
