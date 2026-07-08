@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:go_router/go_router.dart';
@@ -8,6 +9,7 @@ import '../services/payments_service.dart';
 import '../services/reservation_service.dart';
 import '../services/vehicle_service.dart';
 import '../widgets/common_widgets.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class ConfirmBookingScreen extends StatefulWidget {
   final VehicleData vehicle;
@@ -400,11 +402,30 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
     // confirmarlo con Stripe PaymentSheet (US58/TS16) — ya no basta con que el intent
     // exista: el pago solo se considera exitoso si Stripe confirma el cargo (modo test).
     setState(() => _submitState = _SubmitState.processingPayment);
+
     try {
+      // ---------- Flutter Web ----------
+      if (kIsWeb) {
+        final checkoutUrl = await PaymentsService.createCheckoutSession(
+          reservationId: reservation.id,
+          amountCents: (fare.total * 100).round(),
+        );
+
+        final uri = Uri.parse(checkoutUrl);
+
+        if (!await launchUrl(uri)) {
+          throw Exception("No se pudo abrir Stripe Checkout");
+        }
+
+        return;
+      }
+
+      // ---------- Android / iOS ----------
       final intent = await PaymentsService.createPaymentIntent(
         reservationId: reservation.id,
         amountCents: (fare.total * 100).round(),
       );
+
       if (intent.clientSecret.isEmpty) {
         throw PaymentException('El pago no pudo iniciarse.');
       }
@@ -415,24 +436,24 @@ class _ConfirmBookingScreenState extends State<ConfirmBookingScreen> {
           merchantDisplayName: 'Rent2Go',
         ),
       );
+
       await Stripe.instance.presentPaymentSheet();
 
-      // presentPaymentSheet() only completes without throwing once Stripe has confirmed
-      // the charge — a declined card or an error surfaces as a StripeException below,
-      // and the user closing the sheet surfaces as a StripeException with code Canceled.
-      //
-      // Bugfix (US58 follow-up): force-sync the reservation's payment status with the backend
-      // before navigating away. Stripe's `payment_intent.succeeded` webhook is asynchronous and
-      // can still be in flight at this point — without this sync, the very next screen
-      // (bookings_screen.dart) could read the reservation as still PENDING and show a stale
-      // "pay now" prompt despite the charge having just succeeded.
       await PaymentsService.syncPayment(reservation.id);
 
       if (!mounted) return;
+
       setState(() => _submitState = _SubmitState.success);
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Reserva ${reservation.reservationCode} creada y pago confirmado'), backgroundColor: Colors.green),
+        SnackBar(
+          content: Text(
+            'Reserva ${reservation.reservationCode} creada y pago confirmado',
+          ),
+          backgroundColor: Colors.green,
+        ),
       );
+
       context.go('/bookings');
     } on StripeException catch (e) {
       if (!mounted) return;

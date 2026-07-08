@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -10,6 +11,7 @@ import '../services/payments_service.dart';
 import '../services/reservation_service.dart';
 import '../services/vehicle_service.dart';
 import '../widgets/common_widgets.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Vista de detalle de una reserva real (ReservationResource), abierta desde
 /// "Abrir" en bookings_screen.dart (renter) u owner_dashboard_screen.dart (owner).
@@ -90,10 +92,28 @@ class _ReservationDetailScreenState extends State<ReservationDetailScreen> {
     });
 
     try {
+      // ---------- Flutter Web ----------
+      if (kIsWeb) {
+        final checkoutUrl = await PaymentsService.createCheckoutSession(
+          reservationId: _reservation.id,
+          amountCents: (_reservation.totalAmount * 100).round(),
+        );
+
+        final uri = Uri.parse(checkoutUrl);
+
+        if (!await launchUrl(uri)) {
+          throw Exception("No se pudo abrir Stripe Checkout");
+        }
+
+        return;
+      }
+
+      // ---------- Android / iOS ----------
       final intent = await PaymentsService.createPaymentIntent(
         reservationId: _reservation.id,
         amountCents: (_reservation.totalAmount * 100).round(),
       );
+
       if (intent.clientSecret.isEmpty) {
         throw PaymentException('El pago no pudo iniciarse.');
       }
@@ -104,54 +124,50 @@ class _ReservationDetailScreenState extends State<ReservationDetailScreen> {
           merchantDisplayName: 'Rent2Go',
         ),
       );
+
       await Stripe.instance.presentPaymentSheet();
 
-      // Igual que en confirm_booking_screen.dart: llegar aquí sin excepción
-      // significa que Stripe confirmó el cargo. Refrescamos la reserva desde
-      // el backend para reflejar el nuevo estado (CONFIRMED tras el webhook).
-      //
-      // Bugfix (US58 follow-up): forzamos un sync contra Stripe ANTES de releer la reserva.
-      // El webhook payment_intent.succeeded es asíncrono y puede seguir en tránsito justo
-      // aquí — sin este sync, getReservation() podía devolver la reserva todavía en PENDING
-      // pese al cobro exitoso, dejando el botón de "reintentar pago" visible por error.
       await PaymentsService.syncPayment(_reservation.id);
 
       if (!mounted) return;
-      final refreshed = await ReservationService.getReservation(_reservation.id);
+
+      final refreshed =
+      await ReservationService.getReservation(_reservation.id);
+
       if (!mounted) return;
+
       setState(() {
         _retryState = _PaymentRetryState.success;
         if (refreshed != null) _reservation = refreshed;
       });
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Pago confirmado para la reserva ${_reservation.reservationCode}'), backgroundColor: Colors.green),
+        SnackBar(
+          content: Text(
+            'Pago confirmado para la reserva ${_reservation.reservationCode}',
+          ),
+          backgroundColor: Colors.green,
+        ),
       );
     } on StripeException catch (e) {
-      if (!mounted) return;
-      final isUserCancelled = e.error.code == FailureCode.Canceled;
-      if (isUserCancelled) {
-        // Hoja cerrada sin completar: la reserva sigue pendiente, sin cambio de estado.
+      if (e.error.code == 'cancelled') {
+        if (!mounted) return;
         setState(() {
           _retryState = _PaymentRetryState.abandoned;
-          _retryError = 'Pago cancelado. La reserva ${_reservation.reservationCode} sigue pendiente de pago.';
+          _retryError = 'El pago fue cancelado.';
         });
       } else {
+        if (!mounted) return;
         setState(() {
           _retryState = _PaymentRetryState.failed;
-          _retryError = 'El cobro falló: ${e.error.localizedMessage ?? e.error.message ?? "tarjeta rechazada"}. Puedes reintentarlo.';
+          _retryError = 'El pago falló.';
         });
       }
-    } on PaymentException catch (e) {
+    } catch (e) {
       if (!mounted) return;
       setState(() {
         _retryState = _PaymentRetryState.failed;
-        _retryError = '${e.message} Puedes reintentarlo.';
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _retryState = _PaymentRetryState.failed;
-        _retryError = 'No se pudo procesar el cobro. Puedes reintentarlo.';
+        _retryError = 'El pago falló.';
       });
     }
   }

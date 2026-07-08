@@ -262,6 +262,7 @@ class WithdrawalException implements Exception {
 
 class PaymentsService {
   static const String baseUrl = 'https://rent2go-backend-production.up.railway.app/api/v1';
+  static const String currency = 'PEN';
 
   /// GET /api/v1/payments/coverage-plans — códigos y precios reales del backend.
   static Future<List<CoveragePlan>> getCoveragePlans() async {
@@ -312,19 +313,14 @@ class PaymentsService {
 
   /// POST /api/v1/payments/create-intent — crea el PaymentIntent real en el backend.
   ///
-  /// Issue 2 fix: el default de moneda era 'pen' (Soles), pero el proyecto opera con una
-  /// cuenta de Stripe en modo TEST configurada en USD (ver Kotlin's Constants.kt/
-  /// CreateIntentRequest, que siempre usa "usd", y GET /coverage-plans, cuyo dailyRateUSD
-  /// confirma que las tarifas del backend están en dólares). Cobrar con currency='pen' sobre
-  /// un amountCents calculado a partir de una tarifa en USD habría cobrado un monto real
-  /// distinto (o habría sido rechazado por Stripe si la cuenta no tiene PEN habilitado) —
-  /// bug latente, no disparado aún porque ningún pago de Flutter había llegado a completarse
-  /// exitosamente. Alineado con Kotlin/backend: default ahora es 'usd'.
+  /// La moneda de cobro debe ser siempre PEN para el flujo actual del proyecto.
   static Future<PaymentIntentResult> createPaymentIntent({
     required int reservationId,
     required int amountCents,
-    String currency = 'usd',
+    String currency = 'PEN',
   }) async {
+    final String requestCurrency = PaymentsService.currency;
+
     // Issue 1 fix (applied defensively here too, per Issue 2's side-by-side audit): the
     // backend's CreateIntentRequest requires reservationId > 0 and amountCents > 0
     // (@Positive) — reject client-side before the round-trip so a 0/invalid value never
@@ -350,7 +346,7 @@ class PaymentsService {
       body: jsonEncode({
         'reservationId': reservationId,
         'amountCents': amountCents,
-        'currency': currency,
+        'currency': requestCurrency,
       }),
     );
 
@@ -562,5 +558,57 @@ class PaymentsService {
       throw WithdrawalException('No tienes permiso para ver este historial.');
     }
     return PagedWithdrawals.empty();
+  }
+
+  static Future<String> createCheckoutSession({
+    required int reservationId,
+    required int amountCents,
+    String currency = 'PEN',
+  }) async {
+    final String requestCurrency = PaymentsService.currency;
+
+    if (reservationId <= 0) {
+      throw PaymentException(
+        'ID de reserva inválido: no se puede iniciar el cobro.',
+      );
+    }
+
+    if (amountCents <= 0) {
+      throw PaymentException(
+        'Monto a cobrar inválido: no se puede iniciar el cobro.',
+      );
+    }
+
+    final token = await AuthService.getToken();
+
+    if (token == null) {
+      throw PaymentException(
+        'No hay sesión activa para procesar el pago.',
+      );
+    }
+
+    final uri = Uri.parse('$baseUrl/payments/create-checkout-session');
+
+    final response = await http.post(
+      uri,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'reservationId': reservationId,
+        'amountCents': amountCents,
+        'currency': requestCurrency,
+      }),
+    );
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      return body['url'] as String;
+    }
+
+    throw PaymentException(
+      'No se pudo crear la sesión de Checkout.',
+    );
   }
 }

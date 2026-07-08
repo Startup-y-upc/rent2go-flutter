@@ -45,19 +45,14 @@ const String kStripePublishableKey = String.fromEnvironment(
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // reservation_detail_screen.dart (Box 2) shows dates like "Lun 06 jul 2026"
-  // via DateFormat(..., 'es') (formatReservationDayLabel in
-  // reservation_service.dart), which needs the 'es' locale's date symbol
-  // data loaded before first use or it throws a LocaleDataException.
+
   await initializeDateFormatting('es');
   await Hive.initFlutter();
   await Hive.openBox('register_draft');
   await Hive.openBox('user_docs');
   await Hive.openBox('user_profile');
   await Hive.openBox('conversations_map');
-  // flutter_stripe only supports Android/iOS (it calls Platform.operatingSystem
-  // internally, which throws unconditionally on web) — this app targets mobile
-  // only, so Stripe init is skipped entirely on web rather than attempted.
+
   if (!kIsWeb) {
     Stripe.publishableKey = kStripePublishableKey;
     await Stripe.instance.applySettings();
