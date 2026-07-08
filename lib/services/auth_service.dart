@@ -4,6 +4,9 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_model.dart';
 
+/// Service responsible for managing user authentication lifecycle.
+/// Handles remote login/register endpoints, token persistence,
+/// session caching, and user account type checks using SharedPreferences.
 class AuthService {
   static const String baseUrl = 'https://rent2go-backend-production.up.railway.app/api/v1';
 
