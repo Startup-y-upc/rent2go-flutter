@@ -46,6 +46,10 @@ const String kStripePublishableKey = String.fromEnvironment(
       'pk_test_51Th2unJzufJTi3cmRVyqzL0RGDe1fxxjL6v0en5nB1YE63CEZYUeJMKMMgEFnPhoGA2q1YgGxMI6FkBxY2Q7qzcQ00QJmxasJ8',
 );
 
+/// Main entry point of the Rent2Go application.
+/// Initializes Flutter bindings, localizes date formatting for Spanish language,
+/// configures local key-value databases (Hive boxes), and applies Stripe configurations
+/// for mobile devices.
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // reservation_detail_screen.dart (Box 2) shows dates like "Lun 06 jul 2026"
