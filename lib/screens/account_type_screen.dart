@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import '../widgets/common_widgets.dart';
-import '../services/auth_service.dart';
 
 class AccountTypeScreen extends StatefulWidget {
   const AccountTypeScreen({super.key});
@@ -13,10 +13,22 @@ class AccountTypeScreen extends StatefulWidget {
 class _AccountTypeScreenState extends State<AccountTypeScreen> {
   String? _selected;
 
-  Future<void> _continue() async {
+  @override
+  void initState() {
+    super.initState();
+    final draft = Hive.box('register_draft');
+    final saved = draft.get('accountType');
+    if (saved != null) _selected = saved;
+  }
+
+  void _continue() {
     if (_selected == null) return;
-    await AuthService.setAccountType(_selected!);
-    if (mounted) context.push('/validate');
+    Hive.box('register_draft').put('accountType', _selected);
+    context.push('/validate');
+  }
+
+  void _cancel() {
+    context.go('/register');
   }
 
   @override
@@ -24,72 +36,89 @@ class _AccountTypeScreenState extends State<AccountTypeScreen> {
     return Scaffold(
       backgroundColor: kDarkBg,
       body: SafeArea(
-        child: Padding(
+        child: ListView(
           padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 32),
-              const Rent2GoLogo(),
-              const SizedBox(height: 24),
-              StepIndicator(
-                current: 2,
-                total: 3,
-                labels: const ['Datos', 'Tipo cuenta', 'Validación'],
-              ),
-              const SizedBox(height: 32),
-              const Text(
-                '¿Cómo vas a usar\nRent2Go?',
-                style: TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                  height: 1.2,
+          children: [
+            const SizedBox(height: 32),
+            Row(
+              children: [
+                const Rent2GoLogo(),
+                const Spacer(),
+                TextButton(
+                  onPressed: _cancel,
+                  child: const Text('Cancelar',
+                      style: TextStyle(color: Colors.white54, fontSize: 13)),
                 ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            const StepIndicator(
+              current: 2,
+              total: 3,
+              labels: ['Datos', 'Tipo cuenta', 'Validación'],
+            ),
+            const SizedBox(height: 32),
+            const Text(
+              '¿Cómo vas a usar\nRent2Go?',
+              style: TextStyle(
+                fontSize: 26,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+                height: 1.2,
               ),
-              const SizedBox(height: 8),
-              const Text(
-                'Puedes cambiarlo cuando quieras desde tu perfil.',
-                style: TextStyle(color: Colors.white54, fontSize: 13),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Puedes cambiarlo cuando quieras desde tu perfil.',
+              style: TextStyle(color: Colors.white54, fontSize: 13),
+            ),
+            const SizedBox(height: 24),
+
+            _TypeCard(
+              title: 'RENTER',
+              subtitle: 'Quiero alquilar',
+              description: 'Encuentra el coche perfecto cerca de ti. Resérvalo por horas o días.',
+              perks: const [
+                'Buscar y reservar coches',
+                'Pagar de forma segura',
+                'Mensajes con propietarios',
+              ],
+              icon: Icons.directions_car_outlined,
+              selected: _selected == 'RENTER',
+              onTap: () => setState(() => _selected = 'RENTER'),
+            ),
+            const SizedBox(height: 16),
+            _TypeCard(
+              title: 'OWNER',
+              subtitle: 'Quiero rentar mi auto',
+              description: 'Convierte tu coche en ingresos. Tú decides precio y disponibilidad.',
+              perks: const [
+                'Publicar tu vehículo',
+                'Gestionar reservas',
+                'Cobrar mensualmente',
+              ],
+              icon: Icons.car_rental_outlined,
+              selected: _selected == 'OWNER',
+              onTap: () => setState(() => _selected = 'OWNER'),
+            ),
+            const SizedBox(height: 32),
+            CustomButton(
+              label: _selected == 'OWNER'
+                  ? 'Continuar como propietario'
+                  : 'Continuar como arrendatario',
+              onPressed: _selected != null ? _continue : null,
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: TextButton(
+                onPressed: _cancel,
+                child: const Text('Cancelar y volver al registro',
+                    style: TextStyle(color: Colors.white38, fontSize: 13)),
               ),
-              const SizedBox(height: 32),
-              _TypeCard(
-                title: 'ARRENDATARIO',
-                subtitle: 'Quiero alquilar',
-                description: 'Encuentra el coche perfecto cerca de ti. Resérvalo por horas o días.',
-                perks: const [
-                  'Buscar y reservar coches',
-                  'Pagar de forma segura',
-                  'Mensajes con propietarios',
-                ],
-                icon: Icons.directions_car_outlined,
-                selected: _selected == 'arrendatario',
-                onTap: () => setState(() => _selected = 'arrendatario'),
-              ),
-              const SizedBox(height: 16),
-              _TypeCard(
-                title: 'PROPIETARIO',
-                subtitle: 'Quiero rentar mi auto',
-                description: 'Convierte tu coche en ingresos. Tú decides precio y disponibilidad.',
-                perks: const [
-                  'Publicar tu vehículo',
-                  'Gestionar reservas',
-                  'Cobrar mensualmente',
-                ],
-                icon: Icons.car_rental_outlined,
-                selected: _selected == 'propietario',
-                onTap: () => setState(() => _selected = 'propietario'),
-              ),
-              const Spacer(),
-              CustomButton(
-                label: _selected == 'propietario'
-                    ? 'Continuar como propietario'
-                    : 'Continuar como arrendatario',
-                onPressed: _selected != null ? _continue : null,
-              ),
-              const SizedBox(height: 24),
-            ],
-          ),
+            ),
+            const SizedBox(height: 24),
+          ],
         ),
       ),
     );
@@ -137,11 +166,10 @@ class _TypeCard extends StatelessWidget {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: selected ? kCyan.withOpacity(0.15) : Colors.white10,
+                color: selected ? kCyan.withValues(alpha: 0.15) : Colors.white10,
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(icon,
-                  color: selected ? kCyan : Colors.white54, size: 24),
+              child: Icon(icon, color: selected ? kCyan : Colors.white54, size: 24),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -155,20 +183,16 @@ class _TypeCard extends StatelessWidget {
                           fontSize: 15)),
                   const SizedBox(height: 4),
                   Text(description,
-                      style: const TextStyle(
-                          color: Colors.white54, fontSize: 12)),
+                      style: const TextStyle(color: Colors.white54, fontSize: 12)),
                   const SizedBox(height: 10),
                   ...perks.map((p) => Padding(
                         padding: const EdgeInsets.only(bottom: 4),
                         child: Row(
                           children: [
                             Icon(Icons.check_box_outlined,
-                                size: 14,
-                                color: selected ? kCyan : Colors.white38),
+                                size: 14, color: selected ? kCyan : Colors.white38),
                             const SizedBox(width: 6),
-                            Text(p,
-                                style: const TextStyle(
-                                    color: Colors.white70, fontSize: 12)),
+                            Text(p, style: const TextStyle(color: Colors.white70, fontSize: 12)),
                           ],
                         ),
                       )),
@@ -176,8 +200,8 @@ class _TypeCard extends StatelessWidget {
               ),
             ),
             Radio<String>(
-              value: title.toLowerCase(),
-              groupValue: selected ? title.toLowerCase() : null,
+              value: title,
+              groupValue: selected ? title : null,
               onChanged: (_) => onTap(),
               activeColor: kCyan,
             ),

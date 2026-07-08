@@ -1,7 +1,10 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_stripe/flutter_stripe.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 import 'screens/login_screen.dart';
 import 'screens/register_screen.dart';
@@ -12,19 +15,56 @@ import 'screens/explore_screen.dart';
 import 'screens/car_detail_screen.dart';
 import 'screens/confirm_booking_screen.dart';
 import 'screens/bookings_screen.dart';
+import 'screens/reservation_detail_screen.dart';
+import 'services/reservation_service.dart';
 import 'screens/messages_screen.dart';
 import 'screens/chat_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/owner_main_screen.dart';
-import 'services/car_service.dart';
+import 'screens/owner_earnings_screen.dart';
+import 'screens/owner_reservation_history_screen.dart';
+import 'screens/report_issue_screen.dart';
+import 'screens/rate_reservation_screen.dart';
+import 'screens/withdrawal_history_screen.dart';
+import 'screens/notifications_screen.dart';
+import 'screens/terms_screen.dart';
+import 'screens/help_screen.dart';
+import 'screens/favorites_screen.dart';
+import 'services/auth_service.dart';
+import 'models/vehicle_models.dart';
+
+// Stripe test-mode publishable key (US58/TS16). Client-side publishable key —
+// safe to ship in the app binary. Must match the Stripe TEST account whose
+// secret key (STRIPE_SECRET_KEY) the backend currently targets, or PaymentIntent
+// confirmation will fail with a "no such payment_intent"/authentication-style
+// error that can present to the user as a generic decline. Override at build
+// time with --dart-define=STRIPE_PUBLISHABLE_KEY=pk_test_... if testing against
+// a different Stripe test account than the one below.
+const String kStripePublishableKey = String.fromEnvironment(
+  'STRIPE_PUBLISHABLE_KEY',
+  defaultValue:
+      'pk_test_51Th2unJzufJTi3cmRVyqzL0RGDe1fxxjL6v0en5nB1YE63CEZYUeJMKMMgEFnPhoGA2q1YgGxMI6FkBxY2Q7qzcQ00QJmxasJ8',
+);
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // reservation_detail_screen.dart (Box 2) shows dates like "Lun 06 jul 2026"
+  // via DateFormat(..., 'es') (formatReservationDayLabel in
+  // reservation_service.dart), which needs the 'es' locale's date symbol
+  // data loaded before first use or it throws a LocaleDataException.
+  await initializeDateFormatting('es');
   await Hive.initFlutter();
   await Hive.openBox('register_draft');
   await Hive.openBox('user_docs');
   await Hive.openBox('user_profile');
-  await CarService().init();
+  await Hive.openBox('conversations_map');
+  // flutter_stripe only supports Android/iOS (it calls Platform.operatingSystem
+  // internally, which throws unconditionally on web) — this app targets mobile
+  // only, so Stripe init is skipped entirely on web rather than attempted.
+  if (!kIsWeb) {
+    Stripe.publishableKey = kStripePublishableKey;
+    await Stripe.instance.applySettings();
+  }
   runApp(const Rent2GoApp());
 }
 
@@ -47,14 +87,31 @@ class Rent2GoApp extends StatelessWidget {
   }
 }
 
+const _renterPaths = ['/home', '/bookings', '/messages', '/profile', '/car-detail', '/confirm-booking', '/favorites'];
+const _ownerPaths = ['/owner'];
+// Rutas compartidas por ambos roles (no se redirigen): '/reservation-detail',
+// '/chat', '/verify-identity' — se abren tanto desde pantallas de renter como
+// de owner (bookings_screen.dart y owner_dashboard_screen.dart respectivamente).
+
 final _router = GoRouter(
   redirect: (context, state) async {
     final prefs = await SharedPreferences.getInstance();
     final loggedIn = prefs.getBool('is_logged_in') ?? false;
     final path = state.uri.path;
-    final publicPaths = ['/login', '/register', '/account-type', '/validate', '/recover'];
-    if (!loggedIn && !publicPaths.any((p) => path.startsWith(p))) {
-      return '/login';
+    final publicPaths = ['/login', '/register', '/account-type', '/validate', '/recover', '/terms', '/help'];
+
+    if (!loggedIn) {
+      if (!publicPaths.any((p) => path.startsWith(p))) return '/login';
+      return null;
+    }
+
+    final accountType = await AuthService.getAccountType();
+
+    if (accountType == 'OWNER' && _renterPaths.any((p) => path.startsWith(p))) {
+      return '/owner';
+    }
+    if (accountType == 'RENTER' && _ownerPaths.any((p) => path.startsWith(p))) {
+      return '/home';
     }
     return null;
   },
@@ -65,18 +122,27 @@ final _router = GoRouter(
     GoRoute(path: '/account-type', builder: (_, __) => const AccountTypeScreen()),
     GoRoute(path: '/validate', builder: (_, __) => const ValidateAccountScreen()),
     GoRoute(path: '/recover', builder: (_, __) => const RecoverPasswordScreen()),
+
     GoRoute(path: '/home', builder: (_, __) => const ExploreScreen()),
     GoRoute(path: '/bookings', builder: (_, __) => const BookingsScreen()),
     GoRoute(path: '/messages', builder: (_, __) => const MessagesScreen()),
     GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
-    GoRoute(path: '/owner', builder: (_, __) => const OwnerMainScreen()),
+    GoRoute(path: '/favorites', builder: (_, __) => const FavoritesScreen()),
     GoRoute(
       path: '/car-detail',
-      builder: (context, state) => CarDetailScreen(car: state.extra as CarData),
+      builder: (context, state) => CarDetailScreen(vehicle: state.extra as VehicleData),
     ),
     GoRoute(
       path: '/confirm-booking',
-      builder: (context, state) => ConfirmBookingScreen(car: state.extra as CarData),
+      builder: (context, state) => ConfirmBookingScreen(vehicle: state.extra as VehicleData),
+    ),
+    GoRoute(
+      path: '/reservation-detail',
+      builder: (context, state) => ReservationDetailScreen(reservation: state.extra as ReservationData),
+    ),
+    GoRoute(
+      path: '/verify-identity',
+      builder: (context, state) => const ValidateAccountScreen(reVerifyMode: true),
     ),
     GoRoute(
       path: '/chat',
@@ -86,8 +152,36 @@ final _router = GoRouter(
           name: extra['name'] as String,
           car: extra['car'] as String,
           isOnline: extra['isOnline'] as bool,
+          ownerId: extra['ownerId'] as int,
+          renterId: extra['renterId'] as int,
+          vehicleId: extra['vehicleId'] as int?,
+          reservationId: extra['reservationId'] as int?,
+          counterpartyPhotoUrl: extra['counterpartyPhotoUrl'] as String?,
         );
       },
     ),
+
+    GoRoute(path: '/owner', builder: (_, __) => const OwnerMainScreen()),
+    GoRoute(
+      path: '/owner/earnings',
+      builder: (context, __) => OwnerEarningsScreen(
+        onBack: () => context.go('/owner'),
+      ),
+    ),
+    GoRoute(path: '/owner/reservation-history', builder: (_, __) => const OwnerReservationHistoryScreen()),
+    GoRoute(path: '/owner/withdrawal-history', builder: (_, __) => const WithdrawalHistoryScreen()),
+
+    GoRoute(
+      path: '/report-issue',
+      builder: (context, state) => ReportIssueScreen(reservation: state.extra as ReservationData),
+    ),
+    GoRoute(
+      path: '/rate-reservation',
+      builder: (context, state) => RateReservationScreen(reservation: state.extra as ReservationData),
+    ),
+    GoRoute(path: '/notifications', builder: (_, __) => const NotificationsScreen()),
+
+    GoRoute(path: '/terms', builder: (_, __) => const TermsScreen()),
+    GoRoute(path: '/help', builder: (_, __) => const HelpScreen()),
   ],
 );
