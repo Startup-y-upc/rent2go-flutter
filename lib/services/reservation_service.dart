@@ -189,6 +189,8 @@ class ReservationException implements Exception {
   String toString() => message;
 }
 
+/// Service responsible for managing booking reservations, status transitions (approvals, handovers),
+/// and fetching user booking histories (both for renters and owners).
 class ReservationService {
   static const String baseUrl = 'https://rent2go-backend-production.up.railway.app/api/v1';
 
