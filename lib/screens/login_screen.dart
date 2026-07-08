@@ -3,6 +3,9 @@ import 'package:go_router/go_router.dart';
 import '../widgets/common_widgets.dart';
 import '../services/auth_service.dart';
 
+/// Entry screen allowing registered users to log in using their email and password.
+/// Validates input credentials, displays feedback on error, and transitions
+/// to the proper dashboard depending on their RENTER/OWNER account type.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
