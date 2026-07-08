@@ -10,6 +10,9 @@ import '../services/vehicle_service.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/vehicle_filter_sheet.dart';
 
+/// Renter search and discovery dashboard.
+/// Features a map view showing nearby vehicles, search-in-memory text filter,
+/// custom filters (price, categories), and geofenced range queries.
 class ExploreScreen extends StatefulWidget {
   const ExploreScreen({super.key});
   @override
