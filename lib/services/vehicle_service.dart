@@ -5,6 +5,9 @@ import '../models/vehicle_models.dart';
 import '../models/counterparty_data.dart';
 import 'auth_service.dart';
 
+/// Service responsible for managing all vehicle-related backend requests.
+/// Handles listing/creating/updating vehicles, uploading vehicle media/images,
+/// fetching owners/renters reviews, and pulling vehicle availability calendars.
 class VehicleService {
   static const String baseUrl = 'https://rent2go-backend-production.up.railway.app/api/v1';
 
