@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../widgets/common_widgets.dart';
 
+/// Registration screen that guides new users through creating their account.
+/// Saves intermediate inputs in a local Hive draft box to prevent data loss on unexpected exits.
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
 
