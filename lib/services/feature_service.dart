@@ -12,6 +12,8 @@ import '../models/vehicle_models.dart';
 /// memoria y se envían junto con los ya seleccionados del catálogo en el
 /// mismo payload de creación/actualización del vehículo
 /// (VehicleService.createVehicle/updateVehicle), sin llamar a este servicio.
+/// Service responsible for fetching and handling the catalog of vehicle features/amenities.
+/// Helps populate option selectors in forms where vehicles are added or updated.
 class FeatureService {
   static const String baseUrl = 'https://rent2go-backend-production.up.railway.app/api/v1';
 
