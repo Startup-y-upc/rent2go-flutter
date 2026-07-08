@@ -4,6 +4,9 @@ import 'package:hive_flutter/hive_flutter.dart';
 import '../models/message_models.dart';
 import 'auth_service.dart';
 
+/// Service responsible for managing messaging, chats, and conversation channels.
+/// Integrates with the community-trust API endpoint to fetch history and send messages,
+/// utilizing in-flight de-duplication to prevent duplicate HTTP queries.
 class MessageService {
   static const String baseUrl = 'https://rent2go-backend-production.up.railway.app/api/v1';
 
