@@ -34,6 +34,9 @@ class FavoriteVehicle {
 ///   POST   /api/v1/favorites               body {userId, vehicleId}
 ///   DELETE /api/v1/favorites?userId=&vehicleId=
 ///   GET    /api/v1/favorites?userId=&page=&size=  -> PagedResponse<FavoriteResource>
+/// Service providing API connectivity for user's favorite vehicle management.
+/// Integrates with the backend FavoritesController to support toggle, addition,
+/// retrieval, and removal of vehicles associated with a specific user account.
 class FavoriteService {
   static const String baseUrl = 'https://rent2go-backend-production.up.railway.app/api/v1';
 
